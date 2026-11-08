@@ -1,0 +1,9 @@
+name: memcached
+images:
+  - memcached
+  - memcached:*
+port: 11211
+proto: tcp
+sni: false
+gateway_port: 11211
+healthcheck: "echo stats | nc 127.0.0.1 11211"

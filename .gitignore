@@ -1,0 +1,9 @@
+bin/
+dist/
+build/
+.tmp/
+*.test
+*.out
+coverage.txt
+.DS_Store
+.commandcode/

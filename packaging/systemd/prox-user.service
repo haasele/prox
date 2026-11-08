@@ -1,0 +1,19 @@
+[Unit]
+Description=prox local gateway (user session)
+Documentation=https://github.com/haasele/prox
+After=docker.service
+PartOf=default.target
+
+[Service]
+Type=simple
+Environment=PROX_SYSTEM=0
+Environment=PROX_LOG_LEVEL=info
+# Unprivileged installs cannot bind 80/443 unless
+# net.ipv4.ip_unprivileged_port_start is lowered. Override the ports in a
+# drop-in if needed, e.g. PROX_HTTP_PORT=8080 PROX_HTTPS_PORT=8443.
+ExecStart=%h/.local/bin/proxd
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

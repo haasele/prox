@@ -1,0 +1,10 @@
+name: redis
+images:
+  - redis
+  - redis:*
+  - valkey/valkey
+port: 6379
+proto: tcp
+sni: false
+gateway_port: 6379
+healthcheck: "redis-cli ping"

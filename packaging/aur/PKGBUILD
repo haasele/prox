@@ -1,0 +1,46 @@
+# Maintainer: prox contributors <github@haasele.org>
+pkgname=prox
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="One global HTTPS/TCP gateway for Docker containers and local dev processes"
+arch=('x86_64' 'aarch64')
+url="https://github.com/haasele/prox"
+license=('MIT')
+depends=('ca-certificates')
+makedepends=('go')
+optdepends=('docker: container routing' 'libnss3-tools: trust the CA in Chrome/Firefox')
+source=("$pkgname::git+https://github.com/haasele/prox.git")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname"
+  export CGO_ENABLED=0
+  go build -trimpath \
+    -ldflags "-s -w -X github.com/haasele/prox/internal/version.Version=$pkgver" \
+    -o prox ./cmd/prox
+  ./prox completions bash > gw.bash
+  ./prox completions zsh > _gw
+  ./prox completions fish > gw.fish
+}
+
+package() {
+  install -Dm755 "$srcdir/$pkgname/prox" "$pkgdir/usr/bin/prox"
+  ln -s prox "$pkgdir/usr/bin/gw"
+  ln -s prox "$pkgdir/usr/bin/proxd"
+  install -Dm644 "$srcdir/$pkgname/packaging/systemd/prox.service" \
+    "$pkgdir/usr/lib/systemd/system/prox.service"
+  install -Dm644 "$srcdir/$pkgname/packaging/systemd/prox-user.service" \
+    "$pkgdir/usr/lib/systemd/user/prox.service"
+  install -Dm644 "$srcdir/$pkgname/gw.bash" \
+    "$pkgdir/usr/share/bash-completion/completions/gw"
+  install -Dm644 "$srcdir/$pkgname/_gw" \
+    "$pkgdir/usr/share/zsh/site-functions/_gw"
+  install -Dm644 "$srcdir/$pkgname/gw.fish" \
+    "$pkgdir/usr/share/fish/vendor_completions.d/gw.fish"
+  install -Dm644 "$srcdir/$pkgname/docs/USAGE.md" \
+    "$pkgdir/usr/share/doc/$pkgname/USAGE.md"
+  install -Dm644 "$srcdir/$pkgname/docs/ARCHITECTURE.md" \
+    "$pkgdir/usr/share/doc/$pkgname/ARCHITECTURE.md"
+  install -Dm644 "$srcdir/$pkgname/docs/DECISIONS.md" \
+    "$pkgdir/usr/share/doc/$pkgname/DECISIONS.md"
+}

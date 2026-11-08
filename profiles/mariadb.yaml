@@ -1,0 +1,9 @@
+name: mariadb
+images:
+  - mariadb
+  - mariadb:*
+port: 3306
+proto: tcp
+sni: true
+gateway_port: 3306
+healthcheck: "healthcheck.sh --connect --innodb_initialized"

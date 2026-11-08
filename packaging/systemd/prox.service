@@ -1,0 +1,27 @@
+[Unit]
+Description=prox local gateway (Docker + host process proxy)
+Documentation=https://github.com/haasele/prox
+After=network-online.target docker.service
+Wants=network-online.target
+# Do not hard-require Docker: the daemon reconnects with backoff.
+
+[Service]
+Type=simple
+Environment=PROX_SYSTEM=1
+Environment=PROX_LOG_LEVEL=info
+ExecStart=/usr/bin/proxd
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=prox
+RuntimeDirectoryMode=0755
+StateDirectory=prox
+StateDirectoryMode=0700
+LimitNOFILE=65536
+# Caddy binds 80/443; the daemon also writes /run/docker/plugins/prox-authz.sock
+# for enforcement mode. Running as root is the least surprising default for a
+# system-wide install on native Linux.
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

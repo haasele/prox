@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prox dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> prox</div>
+  <div class="statusline">
+    <span id="status-pill" class="pill">connecting…</span>
+    <label class="inline">policy
+      <select id="policy">
+        <option value="rewrite">rewrite</option>
+        <option value="deny">deny</option>
+        <option value="warn">warn</option>
+      </select>
+    </label>
+    <label class="inline"><input type="checkbox" id="enforce"> enforcement</label>
+  </div>
+</header>
+
+<main>
+  <section id="warnings" class="warnings hidden">
+    <h2>Warnings</h2>
+    <ul id="warning-list"></ul>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Routes</h2><span id="route-count" class="muted"></span></div>
+    <div id="routes" class="cards"></div>
+  </section>
+
+  <div class="two-col">
+    <section>
+      <h2>Rules</h2>
+      <table id="rules"><thead><tr><th>ID</th><th>Name</th><th>Project</th><th>Action</th><th>Source</th><th>Target</th><th>Resolve</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Leases</h2>
+      <table id="leases"><thead><tr><th>ID</th><th>Host</th><th>PID</th><th>Port</th><th>Command</th></tr></thead><tbody></tbody></table>
+    </section>
+  </div>
+
+  <section>
+    <h2>Unmanaged containers</h2>
+    <p class="muted">Containers binding host ports outside prox. A rule makes them routable on their next create.</p>
+    <div id="unmanaged" class="cards"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Live events</h2><span class="muted">source of truth: SQLite + bus</span></div>
+    <ol id="events" class="events"></ol>
+  </section>
+</main>
+
+<template id="route-card">
+  <article class="card">
+    <div class="card-head"><span class="host"></span><span class="badge"></span></div>
+    <div class="meta"></div>
+    <div class="actions"></div>
+  </article>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

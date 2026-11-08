@@ -1,0 +1,9 @@
+name: mysql
+images:
+  - mysql
+  - mysql:*
+port: 3306
+proto: tcp
+sni: true
+gateway_port: 3306
+healthcheck: "mysqladmin ping -h 127.0.0.1"

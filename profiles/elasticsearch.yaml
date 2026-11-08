@@ -1,0 +1,9 @@
+name: elasticsearch
+images:
+  - elasticsearch
+  - docker.elastic.co/elasticsearch/elasticsearch
+  - elastic/elasticsearch
+port: 9200
+proto: http
+gateway_port: 9200
+healthcheck: "curl -fsS http://127.0.0.1:9200/_cluster/health"

@@ -1,0 +1,9 @@
+name: rabbitmq
+images:
+  - rabbitmq
+  - rabbitmq:*
+port: 5672
+proto: tcp
+sni: true
+gateway_port: 5672
+healthcheck: "rabbitmq-diagnostics -q ping"

@@ -1,0 +1,8 @@
+name: minio
+images:
+  - minio/minio
+  - quay.io/minio/minio
+port: 9000
+proto: http
+gateway_port: 9000
+healthcheck: "mc ready local"

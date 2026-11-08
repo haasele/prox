@@ -1,0 +1,12 @@
+name: postgres
+images:
+  - postgres
+  - postgres:*
+  - postgis/postgis
+  - timescale/timescaledb
+  - pgvector/pgvector
+port: 5432
+proto: tcp
+sni: true
+gateway_port: 5432
+healthcheck: "pg_isready -U postgres"

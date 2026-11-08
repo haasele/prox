@@ -1,0 +1,8 @@
+name: mailpit
+images:
+  - axllent/mailpit
+  - mailpit
+port: 8025
+proto: http
+gateway_port: 8025
+healthcheck: "wget -qO- http://127.0.0.1:8025/livez"

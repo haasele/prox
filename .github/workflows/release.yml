@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build static Linux binaries
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X github.com/haasele/prox/internal/version.Version=$version" \
+              -o "prox-linux-$arch" ./cmd/prox
+          done
+          sha256sum prox-linux-* > SHA256SUMS
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            prox-linux-amd64
+            prox-linux-arm64
+            SHA256SUMS
+          generate_release_notes: true

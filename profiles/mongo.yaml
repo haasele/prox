@@ -1,0 +1,9 @@
+name: mongo
+images:
+  - mongo
+  - mongo:*
+port: 27017
+proto: tcp
+sni: true
+gateway_port: 27017
+healthcheck: "mongosh --eval 'db.runCommand({ping:1})'"
