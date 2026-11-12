@@ -88,9 +88,9 @@ func Apply(addr string, domains []string) ApplyResult {
 			}
 		}
 	default:
-		res.Note = "no supported DNS manager detected; add these names to /etc/hosts or use gw doctor --fix on a systemd-resolved machine"
+		res.Note = "no supported DNS manager detected; add these names to /etc/hosts or use prox doctor --fix on a systemd-resolved machine"
 		res.Commands = []string{
-			fmt.Sprintf("echo '127.0.0.1 gw.localhost' | sudo tee -a /etc/hosts  # fallback only"),
+			fmt.Sprintf("echo '127.0.0.1 prox.localhost' | sudo tee -a /etc/hosts  # fallback only"),
 		}
 	}
 	return res

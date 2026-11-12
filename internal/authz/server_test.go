@@ -60,7 +60,7 @@ func TestAuthZEvaluation(t *testing.T) {
 	if resp.Allow {
 		t.Fatal("unsigned direct binding must be denied")
 	}
-	if !strings.Contains(resp.Msg, "gw allow") || !strings.Contains(resp.Msg, "prox enforcement") {
+	if !strings.Contains(resp.Msg, "prox allow") || !strings.Contains(resp.Msg, "prox enforcement") {
 		t.Fatalf("message = %q", resp.Msg)
 	}
 

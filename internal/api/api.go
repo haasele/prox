@@ -45,6 +45,8 @@ type Status struct {
 	EnforcementError string `json:"enforcement_error,omitempty"`
 	CAReady          bool   `json:"ca_ready"`
 	DashboardURL     string `json:"dashboard_url"`
+	OwnHTTPPorts     []int  `json:"own_http_ports,omitempty"`
+	OwnTCPPorts      []int  `json:"own_tcp_ports,omitempty"`
 }
 
 type LeaseRequest struct {
@@ -59,6 +61,18 @@ type LeaseRequest struct {
 type LeaseResponse struct {
 	Lease registry.Lease `json:"lease"`
 	Route registry.Route `json:"route"`
+}
+
+// RouteRequest creates a manual HTTP route to an existing listener, usually a
+// container that was started outside prox. Rules still apply on next create;
+// this makes the current process reachable now.
+type RouteRequest struct {
+	Host       string `json:"host"`
+	Proto      string `json:"proto"`
+	SourcePort int    `json:"source_port"`
+	TargetAddr string `json:"target_addr"`
+	Name       string `json:"name"`
+	Redirect   *bool  `json:"redirect,omitempty"`
 }
 
 type EnforcementStatus struct {
@@ -92,6 +106,7 @@ type UnmanagedView struct {
 	Project    string            `json:"project,omitempty"`
 	Service    string            `json:"service,omitempty"`
 	Ports      []string          `json:"ports,omitempty"`
+	TargetAddr string            `json:"target_addr,omitempty"`
 	Labels     map[string]string `json:"labels,omitempty"`
 	Suggestion Suggestion        `json:"suggestion"`
 }
@@ -113,6 +128,7 @@ type ContainersView struct {
 
 type Callbacks struct {
 	Reconcile    func(context.Context) error
+	CreateRoute  func(context.Context, RouteRequest) (*registry.Route, error)
 	DeleteRoute  func(context.Context, int64) error
 	CreateLease  func(context.Context, LeaseRequest) (*LeaseResponse, error)
 	DeleteLease  func(context.Context, int64) error
@@ -209,7 +225,7 @@ func (a *API) StartUnix(ctx context.Context) error {
 }
 
 // StartTCP serves the dashboard on a loopback ephemeral port; Caddy proxies
-// gw.localhost to it.
+// prox.localhost to it.
 func (a *API) StartTCP() (string, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -264,7 +280,9 @@ func (a *API) buildStatus(ctx context.Context) Status {
 		HTTPPort:      a.Cfg.HTTPPort,
 		HTTPSPort:     a.Cfg.HTTPSPort,
 		DNSPort:       a.Cfg.DNSPort,
-		DashboardURL:  "https://" + a.Cfg.HTTPSHostPort("gw.localhost"),
+		DashboardURL:  "https://" + a.Cfg.HTTPSHostPort("prox.localhost"),
+		OwnHTTPPorts:  a.Cfg.OwnHTTPPorts,
+		OwnTCPPorts:   a.Cfg.OwnTCPPorts,
 	}
 	if a.CB.Status != nil {
 		extra := a.CB.Status(ctx)
@@ -352,43 +370,85 @@ func (a *API) handleRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleRuleByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		methodNotAllowed(w)
-		return
-	}
 	id, err := idFromPath(r.URL.Path, "/v1/rules/")
 	if err != nil {
 		writeError(w, 400, err)
 		return
 	}
-	ok, err := a.Engine.DeleteRule(id)
-	if err != nil {
-		writeError(w, 500, err)
-		return
+	switch r.Method {
+	case http.MethodDelete:
+		ok, err := a.Engine.DeleteRule(id)
+		if err != nil {
+			writeError(w, 500, err)
+			return
+		}
+		if !ok {
+			writeError(w, 404, fmt.Errorf("rule %d not found", id))
+			return
+		}
+		_ = a.Engine.ExportRules(a.Cfg.RulesFile)
+		a.Reg.AddEvent("info", "rule", fmt.Sprintf("rule %d deleted", id), map[string]any{"id": id})
+		writeJSON(w, 200, map[string]any{"deleted": id})
+	case http.MethodPut:
+		var req ruleRequest
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+			writeError(w, 400, err)
+			return
+		}
+		action := req.Action
+		if action == "" {
+			action = "allow"
+		}
+		rule, err := a.Engine.UpdateRule(id, policy.RuleRequest{
+			Name: req.Name, Project: req.Project, Source: req.Source, Target: req.Target,
+			Resolve: req.Resolve, Proto: req.Proto, Action: action, Redirect: req.Redirect,
+		})
+		if err != nil {
+			writeError(w, 400, err)
+			return
+		}
+		_ = a.Engine.ExportRules(a.Cfg.RulesFile)
+		a.Reg.AddEvent("info", "rule", fmt.Sprintf("rule %d updated: %s %s", rule.ID, rule.Action, rule.Name), map[string]any{
+			"id": rule.ID, "name": rule.Name, "project": rule.Project, "action": rule.Action,
+			"source": rule.Source, "target": rule.Target, "resolve": rule.Resolve, "proto": rule.Proto,
+		})
+		writeJSON(w, 200, rule)
+	default:
+		methodNotAllowed(w)
 	}
-	if !ok {
-		writeError(w, 404, fmt.Errorf("rule %d not found", id))
-		return
-	}
-	_ = a.Engine.ExportRules(a.Cfg.RulesFile)
-	a.Reg.AddEvent("info", "rule", fmt.Sprintf("rule %d deleted", id), map[string]any{"id": id})
-	writeJSON(w, 200, map[string]any{"deleted": id})
 }
 
 func (a *API) handleRoutes(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		routes, err := a.Reg.ListRoutes()
+		if err != nil {
+			writeError(w, 500, err)
+			return
+		}
+		if routes == nil {
+			routes = []registry.Route{}
+		}
+		writeJSON(w, 200, routes)
+	case http.MethodPost:
+		if a.CB.CreateRoute == nil {
+			writeError(w, 500, fmt.Errorf("route creation unavailable"))
+			return
+		}
+		var req RouteRequest
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+			writeError(w, 400, err)
+			return
+		}
+		route, err := a.CB.CreateRoute(r.Context(), req)
+		if err != nil {
+			writeError(w, 400, err)
+			return
+		}
+		writeJSON(w, 201, route)
+	default:
 		methodNotAllowed(w)
-		return
 	}
-	routes, err := a.Reg.ListRoutes()
-	if err != nil {
-		writeError(w, 500, err)
-		return
-	}
-	if routes == nil {
-		routes = []registry.Route{}
-	}
-	writeJSON(w, 200, routes)
 }
 
 func (a *API) handleRouteByID(w http.ResponseWriter, r *http.Request) {
@@ -562,6 +622,9 @@ func (a *API) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if outcomes == nil {
 		outcomes = []composecheck.Outcome{}
+	}
+	for i := range outcomes {
+		outcomes[i].URL = policy.RouteURL(outcomes[i].Proto, outcomes[i].Host, outcomes[i].GatewayPort, a.Cfg.HTTPSPort)
 	}
 	writeJSON(w, 200, map[string]any{"project": projectName(outcomes), "services": outcomes})
 }

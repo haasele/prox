@@ -72,7 +72,7 @@ func TestEnforcementPlugin(t *testing.T) {
 	if allow, _ := resp["Allow"].(bool); allow {
 		t.Fatalf("direct binding allowed: %+v", resp)
 	}
-	if msg, _ := resp["Msg"].(string); !strings.Contains(msg, "gw allow") {
+	if msg, _ := resp["Msg"].(string); !strings.Contains(msg, "prox allow") {
 		t.Fatalf("deny message: %+v", resp)
 	}
 

@@ -66,7 +66,7 @@ func (d *Daemon) Reconcile(ctx context.Context) error {
 		routesByContainer[r.ContainerID] = append(routesByContainer[r.ContainerID], r)
 	}
 	for id, rs := range routesByContainer {
-		if seen[id] || strings.HasPrefix(id, "lease:") {
+		if seen[id] || strings.HasPrefix(id, "lease:") || strings.HasPrefix(id, "manual:") {
 			continue
 		}
 		for _, r := range rs {
@@ -88,6 +88,8 @@ func (d *Daemon) Reconcile(ctx context.Context) error {
 
 	d.reconcileGatewayPorts(routes)
 	d.reapLeases(ctx)
+	d.applyHints()
+	d.applyTCPOwned()
 
 	d.unmanagedMu.Lock()
 	d.unmanaged = unmanaged
@@ -171,6 +173,11 @@ func (d *Daemon) reconcileContainer(ctx context.Context, c *dockerclient.Contain
 		if err := d.Reg.CreateRoute(r); err != nil {
 			return 0, err
 		}
+		url := policy.RouteURL(r.Proto, r.Host, r.GatewayPort, d.Cfg.HTTPSPort)
+		d.Reg.AddEvent("info", "route", policy.RouteDescription(name, r.Proto, r.Host, r.SourcePort, r.GatewayPort, d.Cfg.HTTPSPort), map[string]any{
+			"container": name, "project": r.Project, "service": r.Service, "image": r.Image,
+			"host": r.Host, "url": url, "source_port": r.SourcePort, "gateway_port": r.GatewayPort, "proto": r.Proto,
+		})
 		if collision {
 			d.Reg.AddEvent("warn", "collision", fmt.Sprintf("host collision: %s routed as %s", host, r.Host), map[string]any{
 				"host": r.Host, "container": name, "project": r.Project,
@@ -183,8 +190,9 @@ func (d *Daemon) reconcileContainer(ctx context.Context, c *dockerclient.Contain
 		if r.SourcePort == 0 && c.State.Running {
 			if p := detectProbePort(r.Proto, c.State.Pid); p > 0 {
 				_ = d.Reg.UpdateRouteSource(r.ID, p)
-				d.Reg.AddEvent("info", "route", fmt.Sprintf("detected listening port %d for %s", p, r.Host), map[string]any{
-					"host": r.Host, "port": p, "container": name,
+				d.Reg.AddEvent("info", "route", fmt.Sprintf("detected port %d/tcp for %s; routed by prox -> %s", p, name, policy.RouteURL(r.Proto, r.Host, r.GatewayPort, d.Cfg.HTTPSPort)), map[string]any{
+					"host": r.Host, "url": policy.RouteURL(r.Proto, r.Host, r.GatewayPort, d.Cfg.HTTPSPort),
+					"port": p, "source_port": p, "gateway_port": r.GatewayPort, "container": name,
 				})
 				r.SourcePort = p
 				changes++
@@ -313,10 +321,14 @@ func (d *Daemon) deleteRouteRecord(r registry.Route) {
 func (d *Daemon) unmanagedView(sum dockerclient.ContainerSummary) (api.UnmanagedView, bool) {
 	var ports []string
 	hasHost := false
+	targetAddr := ""
 	for _, p := range sum.Ports {
 		if p.PublicPort > 0 {
 			hasHost = true
 			ports = append(ports, fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type))
+			if targetAddr == "" {
+				targetAddr = fmt.Sprintf("127.0.0.1:%d", p.PublicPort)
+			}
 		}
 	}
 	if !hasHost {
@@ -348,7 +360,7 @@ func (d *Daemon) unmanagedView(sum dockerclient.ContainerSummary) (api.Unmanaged
 	}
 	return api.UnmanagedView{
 		ID: sum.ID, Name: name, Image: sum.Image, Project: project, Service: service,
-		Ports: ports, Labels: sum.Labels,
+		Ports: ports, TargetAddr: targetAddr, Labels: sum.Labels,
 		Suggestion: api.Suggestion{
 			Name: suggestName, Project: project, Source: source, Proto: proto,
 			Resolve: policy.NormalizeResolve(suggestName, d.Cfg.ProjectDomain), Action: "allow",
@@ -371,11 +383,7 @@ func (d *Daemon) Containers(ctx context.Context) (api.ContainersView, error) {
 	var view api.ContainersView
 	for _, r := range routes {
 		mv := api.ManagedView{Route: r}
-		if r.Proto == "http" {
-			mv.URL = "https://" + d.Cfg.HTTPSHostPort(r.Host)
-		} else if r.Proto == "tcp" {
-			mv.URL = fmt.Sprintf("tcp://%s:%d", r.Host, r.GatewayPort)
-		}
+		mv.URL = policy.RouteURL(r.Proto, r.Host, r.GatewayPort, d.Cfg.HTTPSPort)
 		view.Managed = append(view.Managed, mv)
 		if r.Collision {
 			view.Warnings = append(view.Warnings, fmt.Sprintf("host collision: %s is routed as %s instead of its short name", r.Service, r.Host))
@@ -426,7 +434,7 @@ func (d *Daemon) DeleteRoute(ctx context.Context, id int64) error {
 			var dec policy.Decision
 			if json.Unmarshal(meta.Decision, &dec) == nil {
 				dec.Action = policy.ActionSkip
-				dec.Reason = "route removed with gw rm"
+				dec.Reason = "route removed with prox rm"
 				if b, jerr := json.Marshal(dec); jerr == nil {
 					meta.Decision = b
 					_ = d.Reg.SaveContainerMeta(meta)
@@ -445,6 +453,8 @@ func (d *Daemon) DeleteRoute(ctx context.Context, id int64) error {
 		}
 	}
 	d.Reg.AddEvent("info", "route", fmt.Sprintf("route %d (%s) removed", id, route.Host), map[string]any{"id": id, "host": route.Host})
+	d.applyHints()
+	d.applyTCPOwned()
 	d.requestSync()
 	return nil
 }

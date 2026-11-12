@@ -31,9 +31,9 @@ ln -sf prox "$STAGE/usr/bin/gw"
 ln -sf prox "$STAGE/usr/bin/proxd"
 install -m 0644 "$ROOT/packaging/systemd/prox.service" "$STAGE/usr/lib/systemd/system/prox.service"
 install -m 0644 "$ROOT/packaging/systemd/prox-user.service" "$STAGE/usr/lib/systemd/user/prox.service"
-install -m 0644 "$ROOT/packaging/completions/gw.bash" "$STAGE/usr/share/bash-completion/completions/gw"
-install -m 0644 "$ROOT/packaging/completions/_gw" "$STAGE/usr/share/zsh/site-functions/_gw"
-install -m 0644 "$ROOT/packaging/completions/gw.fish" "$STAGE/usr/share/fish/vendor_completions.d/gw.fish"
+install -m 0644 "$ROOT/packaging/completions/prox.bash" "$STAGE/usr/share/bash-completion/completions/prox"
+install -m 0644 "$ROOT/packaging/completions/_prox" "$STAGE/usr/share/zsh/site-functions/_prox"
+install -m 0644 "$ROOT/packaging/completions/prox.fish" "$STAGE/usr/share/fish/vendor_completions.d/prox.fish"
 install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/prox/README.md"
 install -m 0644 "$ROOT/docs/USAGE.md" "$STAGE/usr/share/doc/prox/USAGE.md"
 install -m 0644 "$ROOT/docs/ARCHITECTURE.md" "$STAGE/usr/share/doc/prox/ARCHITECTURE.md"
@@ -52,7 +52,7 @@ Homepage: https://github.com/haasele/prox
 Description: one global gateway for Docker containers and local dev processes
  prox runs a Docker API socket proxy, rewrites host port bindings, and routes
  every service through an embedded Caddy HTTPS/TCP gateway on stable
- *.localhost hostnames. Includes the gw CLI, a local CA, DNS, and dashboard.
+ *.localhost hostnames. Includes the prox CLI, a local CA, DNS, and dashboard.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'
@@ -65,8 +65,8 @@ cat <<'MSG'
 prox installed.
   system daemon: sudo systemctl enable --now prox
   then:         export DOCKER_HOST=unix:///run/prox/docker.sock
-  trust CA:     sudo gw ca install
-  diagnose:     gw doctor
+  trust CA:     sudo prox ca install
+  diagnose:     prox doctor
 MSG
 exit 0
 EOF

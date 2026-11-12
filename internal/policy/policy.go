@@ -23,7 +23,39 @@ const (
 	ActionSkip      = "skip"
 )
 
-const DashboardHost = "gw.localhost"
+const DashboardHost = "prox.localhost"
+
+// RouteURL is the public address a routed port is served at. HTTP and SNI
+// routes share the HTTPS listener; TCP routes get a dedicated gateway port.
+func RouteURL(proto, host string, gatewayPort, httpsPort int) string {
+	if host == "" {
+		return ""
+	}
+	if proto == "tcp" {
+		if gatewayPort > 0 {
+			return fmt.Sprintf("tcp://%s:%d", host, gatewayPort)
+		}
+		return "tcp://" + host
+	}
+	if httpsPort != 0 && httpsPort != 443 {
+		return fmt.Sprintf("https://%s:%d", host, httpsPort)
+	}
+	return "https://" + host
+}
+
+// RouteDescription is the human-readable form used in events and CLI output:
+// it names the covered container port and where prox serves it.
+func RouteDescription(name, proto, host string, sourcePort, gatewayPort, httpsPort int) string {
+	port := "auto-detected port"
+	if sourcePort > 0 {
+		port = fmt.Sprintf("port %d/tcp", sourcePort)
+	}
+	msg := fmt.Sprintf("%s routed by prox -> %s", port, RouteURL(proto, host, gatewayPort, httpsPort))
+	if name != "" {
+		msg = name + ": " + msg
+	}
+	return msg
+}
 
 const (
 	PolicyRewrite = "rewrite"
@@ -168,7 +200,7 @@ func denyReason(info CreateInfo, ports []int) string {
 	if portList == "" {
 		portList = "unknown"
 	}
-	return fmt.Sprintf("policy is 'deny': %s publishes host port(s) %s without a matching rule. Add one with: gw allow %s --source %s", name, portList, name, firstOr(ps, "PORT"))
+	return fmt.Sprintf("policy is 'deny': %s publishes host port(s) %s without a matching rule. Add one with: prox allow %s --source %s", name, portList, name, firstOr(ps, "PORT"))
 }
 
 func firstOr(v []string, def string) string {
@@ -496,6 +528,41 @@ type RuleRequest struct {
 }
 
 func (e *Engine) AddRule(req RuleRequest) (*registry.Rule, error) {
+	r, err := e.buildRule(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.Reg.CreateRule(r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// UpdateRule replaces an existing rule after applying the same validation as
+// AddRule. Rules are matched at create time, so the change applies to the next
+// matching container.
+func (e *Engine) UpdateRule(id int64, req RuleRequest) (*registry.Rule, error) {
+	existing, err := e.Reg.GetRule(id)
+	if err != nil {
+		return nil, fmt.Errorf("rule %d not found", id)
+	}
+	r, err := e.buildRule(req)
+	if err != nil {
+		return nil, err
+	}
+	r.ID = id
+	r.CreatedAt = existing.CreatedAt
+	ok, err := e.Reg.UpdateRule(r)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("rule %d not found", id)
+	}
+	return r, nil
+}
+
+func (e *Engine) buildRule(req RuleRequest) (*registry.Rule, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, errors.New("rule name is required")
 	}
@@ -596,9 +663,6 @@ func (e *Engine) AddRule(req RuleRequest) (*registry.Rule, error) {
 	}
 	if r.Source == 0 && action == ActionRouteTCP && hasProfile {
 		r.Source = profile.Port
-	}
-	if err := e.Reg.CreateRule(r); err != nil {
-		return nil, err
 	}
 	return r, nil
 }

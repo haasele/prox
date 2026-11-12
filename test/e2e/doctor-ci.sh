@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI-only: install prox system-wide on default ports, trust its CA, and assert
-# that `gw doctor` reports a healthy machine.
+# that `prox doctor` reports a healthy machine.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT=$(pwd)
@@ -39,4 +39,4 @@ done
 "$BIN" ca install
 "$BIN" doctor --fix || true
 DOCKER_HOST=unix:///run/prox/docker.sock "$BIN" doctor
-echo "PASS: gw doctor reports healthy on a clean machine"
+echo "PASS: prox doctor reports healthy on a clean machine"

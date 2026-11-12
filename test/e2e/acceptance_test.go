@@ -13,8 +13,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,9 +49,10 @@ func TestAdHocNginx(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body[:min(200, len(body))])
 	}
 	// The dashboard is served through the same Caddy instance.
-	dash := h.WaitHTTP("gw.localhost", 200, 20*time.Second)
-	if !strings.Contains(dash, "prox dashboard") {
-		t.Fatalf("dashboard body missing title: %s", dash[:min(120, len(dash))])
+	dash := h.WaitHTTP("prox.localhost", 200, 20*time.Second)
+	if !strings.Contains(dash, `id="applications"`) || !strings.Contains(dash, `id="rule-form"`) ||
+		!strings.Contains(dash, `data-tab="activity"`) || !strings.Contains(dash, "<dialog") {
+		t.Fatalf("dashboard body missing tabs, dialog, application table or rule form: %s", dash[:min(160, len(dash))])
 	}
 
 	// The proxy's list/inspect views must present the original binding.
@@ -63,6 +66,65 @@ func TestAdHocNginx(t *testing.T) {
 	}
 	if strings.Contains(raw, "3000/tcp") {
 		t.Fatalf("raw docker still has port bindings: %s", raw)
+	}
+}
+
+func TestOriginalPortHint(t *testing.T) {
+	h := NewHarnessWithOriginalHints(t)
+	h.EnsureImage("nginx:alpine")
+	name := "proxe2e-hint-" + randSuffix()
+	hostPort := freePort(t)
+	t.Cleanup(func() { _, _ = h.DockerRaw("rm", "-f", name) })
+
+	h.MustDocker("run", "-d", "--rm", "--name", name, "-p", fmt.Sprintf("%d:3000", hostPort), "nginx:alpine")
+	h.WaitRoute(name+".localhost", "http", 20*time.Second)
+	target := fmt.Sprintf("https://%s.localhost:%d", name, h.HTTPSPort)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	hintURL := fmt.Sprintf("http://127.0.0.1:%d/", hostPort)
+	var body string
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(hintURL)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			body = string(b)
+			if strings.Contains(body, "prox routes this application") {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, want := range []string{name, target, "prox routes this application"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("original port %d body missing %q: %s", hostPort, want, body)
+		}
+	}
+	if strings.Contains(body, "Welcome to nginx") {
+		t.Fatalf("original port served the application instead of the prox hint")
+	}
+
+	// The hint must go away with the route.
+	if _, err := h.DockerRaw("rm", "-f", name); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(20 * time.Second)
+	for {
+		resp, err := client.Get(hintURL)
+		if err == nil {
+			resp.Body.Close()
+			if time.Now().After(deadline) {
+				t.Fatal("original-port hint kept listening after the container was removed")
+			}
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		break
 	}
 }
 
@@ -380,7 +442,7 @@ func TestRunVite(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatal("route was not removed after gw run exited")
+	t.Fatal("route was not removed after prox run exited")
 }
 
 func waitHMR(t *testing.T, host string, port int) bool {
@@ -595,7 +657,7 @@ func TestPublishAndDeny(t *testing.T) {
 	if derr == nil {
 		t.Fatal("deny policy allowed a port-binding create")
 	}
-	if !strings.Contains(derr.Error(), "policy is 'deny'") || !strings.Contains(derr.Error(), "gw allow") {
+	if !strings.Contains(derr.Error(), "policy is 'deny'") || !strings.Contains(derr.Error(), "prox allow") {
 		t.Fatalf("deny error = %v", derr)
 	}
 }

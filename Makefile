@@ -30,9 +30,9 @@ lint:
 
 completions: build
 	mkdir -p packaging/completions
-	$(BIN)/gw completions bash > packaging/completions/gw.bash
-	$(BIN)/gw completions zsh > packaging/completions/_gw
-	$(BIN)/gw completions fish > packaging/completions/gw.fish
+	$(BIN)/prox completions bash > packaging/completions/prox.bash
+	$(BIN)/prox completions zsh > packaging/completions/_prox
+	$(BIN)/prox completions fish > packaging/completions/prox.fish
 
 package-deb: build completions
 	VERSION=$(VERSION) packaging/build-deb.sh

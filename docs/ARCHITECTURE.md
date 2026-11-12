@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
   subgraph host["Host"]
-    CLI["gw CLI"]
+    CLI["prox CLI"]
     Browser["Browser / curl"]
     DockerCLI["docker / compose CLI"]
     DB["postgres client"]
@@ -66,7 +66,7 @@ sequenceDiagram
   E->>R: rules + policy + profiles
   E-->>P: decision (route-http / route-tcp / publish / deny / warn)
   alt deny
-    P-->>C: 403 {message: "policy is 'deny' … gw allow …"}
+    P-->>C: 403 {message: "policy is 'deny' … prox allow …"}
   else warn / skip
     P->>D: original create
     P->>R: event "warn"
@@ -135,7 +135,7 @@ flowchart LR
   Loop -->|TLS termination\ninternal CA| Routes["host routes"]
   Routes -->|reverse_proxy| Up["container IP:port\nor 127.0.0.1:port"]
   Routes -->|down| Page["friendly 503 page"]
-  Routes -->|gw.localhost| Dash["dashboard\nloopback HTTP"]
+  Routes -->|prox.localhost| Dash["dashboard\nloopback HTTP"]
   Client80["client :80"] --> HTTP["Caddy HTTP server"]
   HTTP -->|default| Redir["308 → https"]
   HTTP -->|rule redirect=false| Up
@@ -144,13 +144,35 @@ flowchart LR
 ```
 
 Certificates come from Caddy's internal PKI. Every route hostname (plus
-`gw.localhost`) is in an explicit automation policy using the `internal` issuer,
+`prox.localhost`) is in an explicit automation policy using the `internal` issuer,
 so certificates are issued per hostname without public ACME. The root CA is
 created on first boot at:
 
 ```
 <state>/ca/pki/authorities/local/root.crt
 ```
+
+## Original-port hints and discovery
+
+After each reconcile, the daemon parses the original create body stored for
+HTTP routes and starts a small HTTP listener on each original host port
+(`internal/hints`). That listener returns a page naming the app and redirecting
+to the route URL; it is skipped when the port is busy, reserved by prox, or the
+route has no stored create body.
+
+A separate 2-second loop (`internal/discover`) scans `/proc/net/tcp{,6}` for
+loopback listeners, maps socket inodes to PIDs, and filters to known dev
+runtimes or directories with a project manifest. New listeners become leases
+via the normal API, so they get the same API/dashboard/event treatment as
+`prox run` and are removed when the process exits. The original port is left
+untouched because the process already owns it.
+
+`PROX_OWN_HTTP_PORTS` pre-seeds the hint manager with reserved ports; a
+generic “prox owns this port” page is served until a route registers the app.
+`PROX_OWN_TCP_PORTS` feeds a second manager (`internal/tcpforward`) that binds
+the configured ports at startup and forwards bytes to the target address of the
+matching route once it is up. Both managers are reconciled after Docker
+lifecycle events, so ownership survives container restarts and route removal.
 
 ## Policy resolution
 
@@ -246,8 +268,8 @@ dashboard:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /v1/status` | policy, backend, sockets, counts, health |
-| `GET/POST /v1/rules`, `DELETE /v1/rules/{id}` | rule CRUD |
-| `GET /v1/routes`, `DELETE /v1/routes/{id}` | routes |
+| `GET/POST /v1/rules`, `PUT/DELETE /v1/rules/{id}` | rule CRUD |
+| `GET/POST /v1/routes`, `DELETE /v1/routes/{id}` | routes; POST adds a manual route for an existing listener |
 | `GET/POST /v1/leases`, `DELETE /v1/leases/{id}` | host-process leases |
 | `GET /v1/events`, `GET /v1/events/stream` | history and SSE |
 | `GET/POST /v1/policy` | rewrite/deny/warn |
@@ -260,7 +282,7 @@ dashboard:
 | `/` | embedded dashboard |
 
 The same handler runs on the Unix socket and on an ephemeral loopback listener
-that Caddy exposes as `gw.localhost`.
+that Caddy exposes as `prox.localhost`.
 
 ## Backends
 
@@ -283,7 +305,7 @@ Desktop:
   signed with HMAC-SHA256 over the rewritten body (key stored 0600 in the state
   dir). The plugin allows unsigned creates only when a `publish` rule matches,
   and denies port-binding creates from the raw socket otherwise.
-- The CA private key stays under the state dir. `gw ca install` only copies the
+- The CA private key stays under the state dir. `prox ca install` only copies the
   public root certificate.
 - No container is granted elevated privileges by prox; the daemon only rewrites
   API payloads and attaches a bridge network.

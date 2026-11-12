@@ -179,6 +179,7 @@ func setupProxy(t *testing.T, fake *fakeDocker, mutate func(*registry.Registry, 
 		RealSocket:  fake.sock,
 		ProxySocket: filepath.Join(t.TempDir(), "proxy.sock"),
 		Domain:      "localhost",
+		HTTPSPort:   443,
 		SignKey:     []byte("test-key"),
 	}, reg, eng, backend.Native{}, dockerclient.New(fake.sock), NewAllocator(reg, 25000, 25010, canBind, log), log)
 	if err := p.EnsureNetwork(context.Background()); err != nil {
@@ -240,6 +241,15 @@ func TestCreateRewriteAndInspect(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("create status %d: %s", resp.StatusCode, b)
 	}
+	var created struct {
+		Warnings []string `json:"Warnings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Warnings) != 1 || !strings.Contains(created.Warnings[0], "port 3000/tcp routed by prox -> https://web-1.localhost") {
+		t.Fatalf("create warnings = %v", created.Warnings)
+	}
 	if len(fake.creates) != 1 {
 		t.Fatalf("upstream saw %d creates", len(fake.creates))
 	}
@@ -273,6 +283,23 @@ func TestCreateRewriteAndInspect(t *testing.T) {
 	routes, _ := reg.ListRoutes()
 	if len(routes) != 1 || routes[0].Host != "web-1.localhost" || routes[0].Status != "pending" {
 		t.Fatalf("routes: %+v", routes)
+	}
+	events, _ := reg.ListEvents(0, 10)
+	var routed *registry.Event
+	for i := range events {
+		if events[i].Kind == "rewrite" {
+			routed = &events[i]
+			break
+		}
+	}
+	if routed == nil {
+		t.Fatalf("no rewrite event: %+v", events)
+	}
+	if !strings.Contains(routed.Message, "port 3000/tcp routed by prox -> https://web-1.localhost") {
+		t.Fatalf("rewrite message = %q", routed.Message)
+	}
+	if routed.Data["url"] != "https://web-1.localhost" || routed.Data["source_port"] != float64(3000) {
+		t.Fatalf("rewrite event data = %+v", routed.Data)
 	}
 
 	// Inspect must present the original bindings to Compose.
@@ -349,7 +376,7 @@ func TestDenyPolicy(t *testing.T) {
 	}
 	var ej map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&ej)
-	if !strings.Contains(ej["message"].(string), "gw allow") {
+	if !strings.Contains(ej["message"].(string), "prox allow") {
 		t.Fatalf("message = %v", ej["message"])
 	}
 	if len(fake.creates) != 0 {

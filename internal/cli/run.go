@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
 
+	"github.com/haasele/prox/internal/hints"
 	"github.com/haasele/prox/internal/hostproc"
 	"github.com/haasele/prox/internal/policy"
 	"github.com/spf13/cobra"
@@ -22,10 +24,10 @@ func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [flags] -- <command...>",
 		Short: "Run a local dev process behind the gateway",
-		Example: `  gw run -- npm run dev
-  gw run --resolve app -- npm run dev
-  gw run -- python manage.py runserver
-  gw run --port-flag '--listen={host}:{port}' -- ./server`,
+		Example: `  prox run -- npm run dev
+  prox run --resolve app -- npm run dev
+  prox run -- python manage.py runserver
+  prox run --port-flag '--listen={host}:{port}' -- ./server`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workDir := dir
@@ -94,8 +96,20 @@ func newRunCmd() *cobra.Command {
 			}
 			registered = true
 			leaseID = resp.Lease.ID
-			fmt.Printf("prox: https://%s -> 127.0.0.1:%d  (%s, pid %d)\n",
-				cfg.HTTPSHostPort(resp.Lease.Host), port, det.Adapter.Name, child.Process.Pid)
+			publicURL := "https://" + cfg.HTTPSHostPort(resp.Lease.Host)
+			fmt.Printf("prox: %s  (%s, pid %d)\n",
+				policy.RouteDescription("", "http", resp.Lease.Host, port, 443, cfg.HTTPSPort), det.Adapter.Name, child.Process.Pid)
+			if hp := det.Adapter.DefaultPort; hp > 0 && hp != port {
+				hintMgr := hints.New(slog.Default())
+				defer hintMgr.Close()
+				for _, ch := range hintMgr.Reconcile([]hints.Hint{{Port: hp, Name: leaseName, URL: publicURL}}) {
+					if ch.Err != nil {
+						fmt.Fprintf(os.Stderr, "prox: port %d is busy; no original-port hint\n", hp)
+					} else if ch.Started {
+						fmt.Printf("prox: http://localhost:%d shows the hint page -> %s\n", hp, publicURL)
+					}
+				}
+			}
 			werr := child.Wait()
 			if werr != nil {
 				if ee, ok := werr.(*exec.ExitError); ok {

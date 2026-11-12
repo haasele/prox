@@ -27,7 +27,7 @@ func (e *exitError) Error() string {
 
 func NewRoot(version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "gw",
+		Use:           "prox",
 		Short:         "prox — one gateway for every container and dev process",
 		Long:          "prox routes every Docker container and local dev process through one HTTPS/TCP gateway.\nSet DOCKER_HOST to the prox socket and use *.localhost hostnames.",
 		SilenceUsage:  true,
@@ -62,11 +62,11 @@ func Main(version string) {
 		var ee *exitError
 		if errors.As(err, &ee) {
 			if ee.err != nil {
-				fmt.Fprintln(os.Stderr, "gw: "+ee.err.Error())
+				fmt.Fprintln(os.Stderr, "prox: "+ee.err.Error())
 			}
 			os.Exit(ee.code)
 		}
-		fmt.Fprintln(os.Stderr, "gw: "+err.Error())
+		fmt.Fprintln(os.Stderr, "prox: "+err.Error())
 		os.Exit(1)
 	}
 }

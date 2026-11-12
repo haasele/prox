@@ -16,9 +16,9 @@ func (d *Daemon) syncRouter(ctx context.Context) error {
 		HTTPSPort:         d.Cfg.HTTPSPort,
 		TLSLoopbackPort:   d.Cfg.TLSLoopbackPort,
 		HTTPSListen:       d.Cfg.HTTPSListen,
-		DashboardHost:     "gw.localhost",
+		DashboardHost:     "prox.localhost",
 		DashboardUpstream: d.dashDial,
-		DashboardURL:      "https://" + d.Cfg.HTTPSHostPort("gw.localhost") + "/",
+		DashboardURL:      "https://" + d.Cfg.HTTPSHostPort("prox.localhost") + "/",
 		CAStorage:         d.Cfg.CAStorageDir,
 	}
 	for _, r := range routes {

@@ -54,10 +54,10 @@ func newAllowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "allow <name>",
 		Short: "Allow and route a service, image, or profile",
-		Example: `  gw allow postgres --source 5432 --target 5432 --resolve database
-  gw allow postgres                                  # profile defaults
-  gw allow web --container-port 3000                 # alias for --source
-  gw allow web --publish                             # keep the host port binding`,
+		Example: `  prox allow postgres --source 5432 --target 5432 --resolve database
+  prox allow postgres                                  # profile defaults
+  prox allow web --container-port 3000                 # alias for --source
+  prox allow web --publish                             # keep the host port binding`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src, tgt, err := normalizePortAliases(portAliases{

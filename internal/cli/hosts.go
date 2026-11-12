@@ -29,14 +29,14 @@ func newHostsCmd() *cobra.Command {
 			if err := c.Get(context.Background(), "/v1/routes", &routes); err != nil {
 				return err
 			}
-			hosts := []string{"gw.localhost"}
+			hosts := []string{"prox.localhost"}
 			for _, r := range routes {
 				if r.Proto == "http" || r.Proto == "sni" {
 					hosts = append(hosts, r.Host)
 				}
 			}
 			if err := dns.WriteHostsFallback("/etc/hosts", hosts); err != nil {
-				return fmt.Errorf("write /etc/hosts (try: sudo gw hosts sync): %w", err)
+				return fmt.Errorf("write /etc/hosts (try: sudo prox hosts sync): %w", err)
 			}
 			fmt.Printf("updated /etc/hosts with %d prox hostname(s)\n", len(hosts))
 			return nil

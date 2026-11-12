@@ -34,8 +34,8 @@ func TestLoadOverrides(t *testing.T) {
 	if strings.Join(cfg.ExtraTLDs, ",") != "test,dev" {
 		t.Fatalf("extra TLDs = %v", cfg.ExtraTLDs)
 	}
-	if cfg.HTTPSHostPort("gw.localhost") != "gw.localhost:18443" {
-		t.Fatalf("host port = %s", cfg.HTTPSHostPort("gw.localhost"))
+	if cfg.HTTPSHostPort("prox.localhost") != "prox.localhost:18443" {
+		t.Fatalf("host port = %s", cfg.HTTPSHostPort("prox.localhost"))
 	}
 }
 

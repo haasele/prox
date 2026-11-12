@@ -146,7 +146,7 @@ func TestPolicyDenyAndWarn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Action != ActionDeny || !strings.Contains(d.Reason, "gw allow") {
+	if d.Action != ActionDeny || !strings.Contains(d.Reason, "prox allow") {
 		t.Fatalf("want deny with hint, got %+v", d)
 	}
 	if _, err := e.AddRule(RuleRequest{Name: "web", Source: 3000, Proto: "http"}); err != nil {
@@ -168,6 +168,34 @@ func TestPolicyDenyAndWarn(t *testing.T) {
 	}
 	if d.Action != ActionWarn {
 		t.Fatalf("want warn, got %+v", d)
+	}
+}
+
+func TestUpdateRule(t *testing.T) {
+	e := newEngine(t)
+	rule, err := e.AddRule(RuleRequest{Name: "web", Source: 3000, Proto: "http"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := e.UpdateRule(rule.ID, RuleRequest{Name: "web", Source: 8080, Proto: "http", Resolve: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != rule.ID || updated.Source != 8080 || updated.Resolve != "app.localhost" {
+		t.Fatalf("updated rule = %+v", updated)
+	}
+	stored, err := e.Reg.GetRule(rule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Source != 8080 || stored.Resolve != "app.localhost" {
+		t.Fatalf("stored rule = %+v", stored)
+	}
+	if _, err := e.UpdateRule(99999, RuleRequest{Name: "web", Proto: "http"}); err == nil {
+		t.Fatal("update of a missing rule should fail")
+	}
+	if _, err := e.UpdateRule(rule.ID, RuleRequest{Name: "web", Proto: "http", Target: 8443}); err == nil || !strings.Contains(err.Error(), "443") {
+		t.Fatalf("invalid update error = %v", err)
 	}
 }
 
@@ -206,7 +234,7 @@ func TestAddRuleDefaultsAndSNI(t *testing.T) {
 	if _, err := e.AddRule(RuleRequest{Name: "x", Source: 70000}); err == nil {
 		t.Fatal("out of range port should error")
 	}
-	if _, err := e.AddRule(RuleRequest{Name: "x", Resolve: "gw.localhost"}); err == nil {
+	if _, err := e.AddRule(RuleRequest{Name: "x", Resolve: "prox.localhost"}); err == nil {
 		t.Fatal("dashboard hostname must be reserved")
 	}
 }

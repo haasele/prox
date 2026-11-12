@@ -2,6 +2,7 @@ bin/
 dist/
 build/
 .tmp/
+demo/demo-app
 *.test
 *.out
 coverage.txt

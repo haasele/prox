@@ -46,7 +46,7 @@ func TestCaddyHTTPAndTLS(t *testing.T) {
 			{Host: "app.localhost", Upstream: upURL, Status: "up", Redirect: true},
 			{Host: "plain.localhost", Upstream: upURL, Status: "up", Redirect: false},
 		},
-		DashboardHost: "gw.localhost", DashboardUpstream: upURL,
+		DashboardHost: "prox.localhost", DashboardUpstream: upURL,
 		CAStorage: caDir,
 	}
 	if err := r.Sync(context.Background(), in); err != nil {
@@ -112,6 +112,18 @@ func TestCaddyHTTPAndTLS(t *testing.T) {
 		t.Fatalf("Location = %q, want %q", got, want)
 	}
 
+	// Unknown HTTP hosts get a clear 503 instead of a redirect to a TLS error.
+	req, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/", httpPort), nil)
+	req.Host = "unknown.localhost"
+	resp, err = hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unknown host status = %d", resp.StatusCode)
+	}
+
 	// Rules with redirect disabled are served over plain HTTP.
 	req, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/", httpPort), nil)
 	req.Host = "plain.localhost"
@@ -126,8 +138,8 @@ func TestCaddyHTTPAndTLS(t *testing.T) {
 	}
 
 	// Dashboard host serves through the same proxy.
-	client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: pool, ServerName: "gw.localhost"}
-	resp, err = client.Get("https://gw.localhost/")
+	client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: pool, ServerName: "prox.localhost"}
+	resp, err = client.Get("https://prox.localhost/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +201,7 @@ func TestCaddyTCPGatewayAndSNI(t *testing.T) {
 	t.Cleanup(func() { _ = r.Stop() })
 	in := Input{
 		HTTPPort: httpPort, HTTPSPort: httpsPort, TLSLoopbackPort: loopPort,
-		DashboardHost: "gw.localhost", CAStorage: caDir,
+		DashboardHost: "prox.localhost", CAStorage: caDir,
 		TCP: []TCPRoute{{Port: gwPort, Upstream: echoAddr, Status: "up"}},
 		SNI: []SNIRoute{{Host: "db.localhost", Upstream: echoAddr, Status: "up"}},
 	}

@@ -83,10 +83,5 @@ func printEvent(ev eventJSON, asJSON bool) {
 		level = "info"
 	}
 	msg := ev.Message
-	if len(ev.Data) > 0 && (ev.Kind == "rewrite" || ev.Kind == "deny") {
-		if h, ok := ev.Data["host"]; ok {
-			msg += fmt.Sprintf("  [%v]", h)
-		}
-	}
 	fmt.Printf("%s %-5s %-12s %s\n", ts, strings.ToUpper(level), ev.Kind, msg)
 }

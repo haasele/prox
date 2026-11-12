@@ -22,6 +22,7 @@ type Outcome struct {
 	Action      string `json:"action"`
 	Status      string `json:"status"`
 	Host        string `json:"host,omitempty"`
+	URL         string `json:"url,omitempty"`
 	Proto       string `json:"proto,omitempty"`
 	SourcePort  int    `json:"source_port,omitempty"`
 	GatewayPort int    `json:"gateway_port,omitempty"`

@@ -1,5 +1,5 @@
 // Command prox is the single binary form: invoked as proxd (or prox daemon)
-// it runs the daemon; otherwise it behaves as the gw CLI.
+// it runs the daemon; otherwise it behaves as the prox CLI.
 package main
 
 import (

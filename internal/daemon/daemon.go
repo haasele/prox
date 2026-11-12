@@ -15,28 +15,33 @@ import (
 	"github.com/haasele/prox/internal/authz"
 	"github.com/haasele/prox/internal/backend"
 	"github.com/haasele/prox/internal/config"
+	"github.com/haasele/prox/internal/discover"
 	"github.com/haasele/prox/internal/dns"
 	"github.com/haasele/prox/internal/dockerclient"
 	"github.com/haasele/prox/internal/dockerproxy"
+	"github.com/haasele/prox/internal/hints"
 	"github.com/haasele/prox/internal/policy"
 	"github.com/haasele/prox/internal/registry"
 	"github.com/haasele/prox/internal/router"
+	"github.com/haasele/prox/internal/tcpforward"
 	"github.com/haasele/prox/profiles"
 )
 
 type Daemon struct {
-	Cfg     *config.Config
-	Log     *slog.Logger
-	Reg     *registry.Registry
-	Engine  *policy.Engine
-	Docker  *dockerclient.Client
-	Backend backend.Backend
-	Proxy   *dockerproxy.Proxy
-	Alloc   *dockerproxy.Allocator
-	Router  *router.Caddy
-	DNS     *dns.Server
-	API     *api.API
-	Authz   *authz.Server
+	Cfg      *config.Config
+	Log      *slog.Logger
+	Reg      *registry.Registry
+	Engine   *policy.Engine
+	Docker   *dockerclient.Client
+	Backend  backend.Backend
+	Proxy    *dockerproxy.Proxy
+	Alloc    *dockerproxy.Allocator
+	Router   *router.Caddy
+	DNS      *dns.Server
+	API      *api.API
+	Authz    *authz.Server
+	Hints    *hints.Manager
+	OwnedTCP *tcpforward.Manager
 
 	version  string
 	dashDial string
@@ -51,6 +56,9 @@ type Daemon struct {
 	leaseMu       sync.Mutex
 	watchedLeases map[int64]bool
 	leaseWG       sync.WaitGroup
+	discoverMu    sync.Mutex
+	discoverTried map[string]time.Time
+	procStart     uint64
 	watchMu       sync.Mutex
 	closing       bool
 	unmanagedMu   sync.RWMutex
@@ -109,6 +117,7 @@ func New(ctx context.Context, cfg *config.Config, version string) (*Daemon, erro
 		RealSocket:  cfg.DockerSocket,
 		ProxySocket: cfg.SocketPath,
 		Domain:      cfg.ProjectDomain,
+		HTTPSPort:   cfg.HTTPSPort,
 		SignKey:     key,
 		SocketGroup: cfg.SocketGroup,
 	}, reg, eng, be, idx, alloc, logger)
@@ -120,13 +129,17 @@ func New(ctx context.Context, cfg *config.Config, version string) (*Daemon, erro
 	d := &Daemon{
 		Cfg: cfg, Log: logger, Reg: reg, Engine: eng, Docker: idx, Backend: be,
 		Proxy: proxy, Alloc: alloc, Router: caddy, DNS: dnsServer, Authz: authzServer,
-		version: version,
-		ctx:     rootCtx, cancel: cancel,
+		Hints:    hints.New(logger),
+		OwnedTCP: tcpforward.New(logger),
+		version:  version,
+		ctx:      rootCtx, cancel: cancel,
 		syncCh: make(chan struct{}, 1), reconcileCh: make(chan struct{}, 1),
 		watchedLeases: map[int64]bool{},
+		procStart:     discover.SelfStartTicks(),
 	}
 	d.API = api.New(reg, eng, cfg, idx, api.Callbacks{
 		Reconcile:    d.Reconcile,
+		CreateRoute:  d.CreateManualRoute,
 		DeleteRoute:  d.DeleteRoute,
 		CreateLease:  d.CreateLease,
 		DeleteLease:  d.DeleteLease,
@@ -195,7 +208,7 @@ func (d *Daemon) Start() error {
 	d.dashDial = strings.TrimPrefix(dash, "http://")
 
 	// First router load: dashboard + any persisted routes. The CA is created
-	// here so `gw ca install` works immediately.
+	// here so `prox ca install` works immediately.
 	if err := d.syncRouter(d.ctx); err != nil {
 		d.Log.Error("initial router config failed", "err", err)
 		d.Reg.AddEvent("error", "route", "initial Caddy config failed: "+err.Error(), nil)
@@ -220,6 +233,10 @@ func (d *Daemon) Start() error {
 	go d.dockerLoop()
 	d.wg.Add(1)
 	go d.leaseLoop()
+	if d.Cfg.Discover {
+		d.wg.Add(1)
+		go d.discoverLoop()
+	}
 	return nil
 }
 
@@ -234,6 +251,8 @@ func (d *Daemon) Close() {
 		_ = d.Authz.Stop(ctx)
 		_ = d.API.Close(ctx)
 		_ = d.DNS.Stop(ctx)
+		d.Hints.Close()
+		d.OwnedTCP.Close()
 		_ = d.Proxy.Close(ctx)
 		_ = d.Router.Stop()
 		d.wg.Wait()

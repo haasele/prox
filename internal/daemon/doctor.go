@@ -36,13 +36,13 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 	}
 
 	if _, err := d.Docker.InspectNetwork(ctx, d.Proxy.Network); err != nil {
-		add("gw network", "fail", "network "+d.Proxy.Network+" is missing: "+err.Error())
+		add("prox network", "fail", "network "+d.Proxy.Network+" is missing: "+err.Error())
 	} else {
 		gw := d.Proxy.GatewayAddr()
 		if gw == "" {
 			gw = "unknown gateway"
 		}
-		add("gw network", "ok", d.Proxy.Network+" ("+gw+")")
+		add("prox network", "ok", d.Proxy.Network+" ("+gw+")")
 	}
 
 	httpStatus, httpDetail := d.portCheck(ctx, d.Cfg.HTTPPort, false)
@@ -67,7 +67,7 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 			caStatus, caDetail = "warn", "trusted only in NSS/Firefox, not the system store"
 		default:
 			caResult = ca.InstallSystem(pem)
-			caDetail = "CA is not trusted; run gw ca install"
+			caDetail = "CA is not trusted; run prox ca install"
 			if len(caResult.Commands) > 0 {
 				caDetail += " or: " + strings.Join(caResult.Commands, "; ")
 			}
@@ -77,16 +77,16 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 	}
 	add("CA trusted", caStatus, caDetail)
 
-	if addrs, err := dns.Lookup(ctx, d.DNS.Addr(), "gw.localhost"); err != nil {
+	if addrs, err := dns.Lookup(ctx, d.DNS.Addr(), "prox.localhost"); err != nil {
 		add("DNS resolver", "fail", fmt.Sprintf("query %s: %v", d.DNS.Addr(), err))
 	} else if !containsLoopback(addrs) {
-		add("DNS resolver", "fail", fmt.Sprintf("gw.localhost -> %v, want 127.0.0.1", addrs))
+		add("DNS resolver", "fail", fmt.Sprintf("prox.localhost -> %v, want 127.0.0.1", addrs))
 	} else {
-		add("DNS resolver", "ok", fmt.Sprintf("%s answers gw.localhost -> 127.0.0.1", d.DNS.Addr()))
+		add("DNS resolver", "ok", fmt.Sprintf("%s answers prox.localhost -> 127.0.0.1", d.DNS.Addr()))
 	}
 
 	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	sys, sysErr := net.DefaultResolver.LookupHost(lookupCtx, "gw.localhost")
+	sys, sysErr := net.DefaultResolver.LookupHost(lookupCtx, "prox.localhost")
 	cancel()
 	if sysErr != nil || !containsLoopback(sys) {
 		detail := "system DNS does not resolve *.localhost"
@@ -95,11 +95,11 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 		}
 		apply := dns.Apply(d.DNS.Addr(), d.DNS.Domains)
 		if len(apply.Commands) > 0 {
-			detail += "; run gw doctor --fix or: " + strings.Join(apply.Commands, "; ")
+			detail += "; run prox doctor --fix or: " + strings.Join(apply.Commands, "; ")
 		}
 		add("system DNS", "warn", detail)
 	} else {
-		add("system DNS", "ok", fmt.Sprintf("gw.localhost -> %v", sys))
+		add("system DNS", "ok", fmt.Sprintf("prox.localhost -> %v", sys))
 	}
 
 	enf, _ := d.Reg.GetMeta("enforcement")
@@ -111,7 +111,7 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 			add("enforcement", "fail", "enabled but plugin not running: "+st.Error)
 		}
 	} else {
-		add("enforcement", "ok", "off (optional; gw enforce on)")
+		add("enforcement", "ok", "off (optional; prox enforce on)")
 	}
 
 	if fix && len(notes) > 0 {
@@ -130,9 +130,9 @@ func (d *Daemon) Doctor(ctx context.Context, fix bool) (api.DoctorReport, error)
 func (d *Daemon) fix(ctx context.Context) []string {
 	var notes []string
 	if err := d.Proxy.EnsureNetwork(ctx); err != nil {
-		notes = append(notes, "gw network: "+err.Error())
+		notes = append(notes, "prox network: "+err.Error())
 	} else {
-		notes = append(notes, "gw network ensured")
+		notes = append(notes, "prox network ensured")
 	}
 	apply := dns.Apply(d.DNS.Addr(), d.DNS.Domains)
 	if apply.Applied {
@@ -173,7 +173,7 @@ func (d *Daemon) portCheck(ctx context.Context, port int, isTLS bool) (string, s
 	}
 	if isTLS {
 		dialer := &net.Dialer{Timeout: 2 * time.Second}
-		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true, ServerName: "gw.localhost"})
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true, ServerName: "prox.localhost"})
 		if err != nil {
 			return "fail", "in use, but not a prox TLS listener: " + err.Error()
 		}
@@ -182,9 +182,9 @@ func (d *Daemon) portCheck(ctx context.Context, port int, isTLS bool) (string, s
 		if len(certs) > 0 {
 			issuer := certs[0].Issuer.CommonName
 			if owned, err := d.certOwned(ctx, certs); owned {
-				return "ok", "serving TLS for gw.localhost (issuer " + issuer + ")"
+				return "ok", "serving TLS for prox.localhost (issuer " + issuer + ")"
 			} else if err != nil && strings.Contains(issuer, "prox local CA") {
-				return "ok", "serving TLS for gw.localhost (issuer " + issuer + ")"
+				return "ok", "serving TLS for prox.localhost (issuer " + issuer + ")"
 			}
 			return "fail", "in use by another TLS service (issuer " + issuer + ")"
 		}
@@ -194,7 +194,7 @@ func (d *Daemon) portCheck(ctx context.Context, port int, isTLS bool) (string, s
 	if err != nil {
 		return "fail", err.Error()
 	}
-	req.Host = "gw.localhost"
+	req.Host = "prox.localhost"
 	client := &http.Client{
 		Timeout: 2 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error {

@@ -2,11 +2,12 @@
 
 One global HTTPS/TCP gateway for Docker containers and local dev processes.
 
-`prox` makes every service reachable at a stable `*.localhost` hostname and
-keeps host ports mine — port 3000, 5432, 8080 and friends stop colliding between
-projects. It works by proxying the Docker API socket, rewriting
-`POST /containers/create` in flight, and routing traffic through an embedded
-Caddy instance. No Compose file or Dockerfile changes are required.
+`prox` makes every service reachable at a stable `*.localhost` hostname.
+Docker containers created through the prox socket and host dev servers started
+with `prox run` keep their familiar `localhost:3000`-style address too: prox
+answers there with a page naming the application and redirecting to its
+`*.localhost` URL. TCP ports are freed automatically, and HTTP hint pages can be
+disabled with `PROX_ORIGINAL_HINTS=off`.
 
 ```
 docker run -p 3000:3000 nginx      ->  https://my-container.localhost
@@ -23,7 +24,7 @@ npm run dev                        ->  https://my-project.localhost
   responses are restored so `docker compose up` stays up-to-date.
 - **Policy engine** — default `rewrite`, opt-in `deny` and `warn`; per-service,
   per-project, per-image and per-profile rules. Every rewrite, rename and denial
-  is an event in `gw ls`, `gw events` and the dashboard.
+  is an event in `prox ls`, `prox events` and the dashboard.
 - **Stable hostnames** — `<service>.<project>.localhost` by default, short
   `database.localhost` names with rules. Collisions append the project instead
   of stealing a name.
@@ -32,12 +33,28 @@ npm run dev                        ->  https://my-project.localhost
 - **TCP + SNI** — Postgres, MySQL, Mongo, Redis, RabbitMQ and friends get
   dedicated gateway ports; TLS protocols can share 443 via SNI (Postgres 17
   `sslnegotiation=direct` works).
-- **Host processes** — `gw run -- npm run dev` allocates a port, detects Vite,
+- **Original URL hints** — accessing the host port a container asked for
+  (`localhost:3000`) shows a prox page naming the app and redirecting to
+  `https://myapp.localhost`. The page is served by prox; the container keeps no
+  host binding. `PROX_ORIGINAL_HINTS=off` frees HTTP host ports completely.
+- **Pre-owned ports** — `PROX_OWN_HTTP_PORTS=3000,5173` and
+  `PROX_OWN_TCP_PORTS=3306,5431` make prox bind those ports first. HTTP ports
+  answer with the hint page; TCP ports forward to the routed app, so the
+  original address keeps working. Apps must run through prox, which is the
+  point: nothing else can steal the port.
+- **Dev-server discovery** — HTTP servers already listening on loopback
+  (Node, Bun, Python, Go, Rails, PHP, …) are found automatically and given a
+  `*.localhost` route, even when they were started without `prox run`. The
+  process keeps its original port; prox adds the stable HTTPS name.
+- **Host processes** — `prox run -- npm run dev` allocates a port, detects Vite,
   Next, Nuxt, SvelteKit, Astro, Rails, Django, Flask, FastAPI, Express, Phoenix,
   Laravel and Go, registers a lease, and removes the route when the process
   exits.
-- **Dashboard** — `https://gw.localhost` shows routes, rules, leases, collisions,
-  live events and one-click allow buttons.
+- **Dashboard** — `https://prox.localhost` has three tabs: Applications, Rules
+  and Activity. Applications shows every route with DNS name, source/gateway
+  ports, upstream and status, plus unmanaged containers, warnings and leases.
+  Rules supports create, edit and delete in a dialog. Activity is the event log.
+  Applications has search; Policy and Enforcement live under Settings.
 - **Enforcement** — an opt-in Docker AuthZ plugin rejects direct port binding
   from the raw socket; the proxy signs its rewritten requests.
 
@@ -54,7 +71,7 @@ cd prox
 The installer elevates itself with sudo when needed and:
 
 - builds a static binary (or uses `--binary PATH` / a release download),
-- installs `/usr/local/bin/{prox,gw,proxd}`,
+- installs `/usr/local/bin/prox` and `proxd` (plus a legacy `gw` symlink),
 - creates and starts a systemd, OpenRC or runit service on 80/443,
 - installs the local CA into the system store and (when run via sudo) the
   invoking user's Chrome/Firefox NSS databases,
@@ -91,7 +108,7 @@ cd packaging/aur && makepkg -si
 brew install --build-from-source ./packaging/homebrew/prox.rb
 
 # From source
-make build        # bin/prox, with bin/gw and bin/proxd wrappers
+make build        # bin/prox, with bin/proxd (and legacy bin/gw)
 ```
 
 System service (native Linux Docker, binds 80/443):
@@ -99,8 +116,8 @@ System service (native Linux Docker, binds 80/443):
 ```bash
 sudo systemctl enable --now prox
 export DOCKER_HOST=unix:///run/prox/docker.sock
-sudo gw ca install
-gw doctor
+sudo prox ca install
+prox doctor
 ```
 
 User service (no root; use high ports unless
@@ -109,18 +126,17 @@ User service (no root; use high ports unless
 ```bash
 install -Dm755 bin/prox ~/.local/bin/proxd
 ln -sf proxd ~/.local/bin/prox
-ln -sf proxd ~/.local/bin/gw
 mkdir -p ~/.config/systemd/user
 cp packaging/systemd/prox-user.service ~/.config/systemd/user/prox.service
 systemctl --user enable --now prox
 export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/prox/prox.sock
-gw ca install
+prox ca install
 ```
 
-`gw ca install` installs the CA into the system store and Chrome/Firefox NSS
+`prox ca install` installs the CA into the system store and Chrome/Firefox NSS
 databases. Without root it prints the exact commands instead of failing. The
 system daemon's Docker proxy and API sockets are group-owned by `docker`
-(mode 0660), so existing Docker users can use `gw` without sudo.
+(mode 0660), so existing Docker users can use `prox` without sudo.
 
 ## Quick start
 
@@ -131,32 +147,34 @@ proxd
 # terminal 2: everything Docker does goes through prox
 export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/prox/prox.sock
 docker run -d --name web -p 3000:3000 nginx
+# Docker prints: WARNING: web: port 80/tcp routed by prox -> https://web.localhost
+# http://localhost:3000 now shows a prox hint page and redirects there
 # nginx is really on container port 80; prox detects EXPOSE 80
 curl --cacert ~/.local/state/prox/ca/pki/authorities/local/root.crt \
      --resolve web.localhost:443:127.0.0.1 https://web.localhost/
 
-gw ls
-gw events -f
-open https://gw.localhost/
+prox ls
+prox events -f
+open https://prox.localhost/
 ```
 
 ## CLI at a glance
 
 ```
-gw allow <name> [--source N | --container-port N]
+prox allow <name> [--source N | --container-port N]
                 [--target N | --gateway-port N]
                 [--resolve HOST] [--project P]
                 [--proto http|tcp] [--publish]
-gw deny  <name> [--project P]
-gw ls
-gw rm <id>                       # rN rules, tN routes, lN leases
-gw check <compose.yml>           # dry-run every service
-gw run [--resolve H] -- <cmd...>
-gw events [-f]
-gw policy set rewrite|deny|warn
-gw ca install | uninstall | show
-gw doctor [--fix]
-gw enforce on|off|status
+prox deny  <name> [--project P]
+prox ls
+prox rm <id>                       # rN rules, tN routes, lN leases
+prox check <compose.yml>           # dry-run every service
+prox run [--resolve H] -- <cmd...>
+prox events [-f]
+prox policy set rewrite|deny|warn
+prox ca install | uninstall | show
+prox doctor [--fix]
+prox enforce on|off|status
 ```
 
 See [docs/USAGE.md](docs/USAGE.md) for complete scenarios and
@@ -198,7 +216,7 @@ The end-to-end suite covers every acceptance criterion, including two Compose
 projects on 80/443, Postgres TCP + SNI, Vite HMR, Compose no-recreate, daemon
 restart, proxy conformance, collision naming, deny/publish policies and the
 AuthZ plugin. CI additionally runs enforcement against a real dockerd and
-`gw doctor` on 80/443 as root.
+`prox doctor` on 80/443 as root.
 
 ## License
 

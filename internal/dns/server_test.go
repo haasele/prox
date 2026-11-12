@@ -34,7 +34,7 @@ func TestResolver(t *testing.T) {
 	}()
 
 	c := &dns.Client{Timeout: 2 * time.Second}
-	for _, host := range []string{"gw.localhost", "web.shop.localhost", "api.test"} {
+	for _, host := range []string{"prox.localhost", "web.shop.localhost", "api.test"} {
 		m := new(dns.Msg)
 		m.SetQuestion(dns.Fqdn(host), dns.TypeA)
 		resp, _, err := c.Exchange(m, s.Addr())
@@ -60,7 +60,7 @@ func TestResolver(t *testing.T) {
 	}
 
 	m = new(dns.Msg)
-	m.SetQuestion("gw.localhost.", dns.TypeAAAA)
+	m.SetQuestion("prox.localhost.", dns.TypeAAAA)
 	resp, _, err = c.Exchange(m, s.Addr())
 	if err != nil || len(resp.Answer) != 1 {
 		t.Fatalf("AAAA: %v %+v", err, resp)
@@ -69,12 +69,12 @@ func TestResolver(t *testing.T) {
 	// TCP as well.
 	tc := &dns.Client{Net: "tcp", Timeout: 2 * time.Second}
 	m = new(dns.Msg)
-	m.SetQuestion("gw.localhost.", dns.TypeA)
+	m.SetQuestion("prox.localhost.", dns.TypeA)
 	if _, _, err := tc.Exchange(m, s.Addr()); err != nil {
 		t.Fatalf("tcp: %v", err)
 	}
 
-	addrs, err := Lookup(context.Background(), s.Addr(), "gw.localhost")
+	addrs, err := Lookup(context.Background(), s.Addr(), "prox.localhost")
 	if err != nil || len(addrs) != 1 || addrs[0] != "127.0.0.1" {
 		t.Fatalf("Lookup = %v, %v", addrs, err)
 	}
@@ -96,10 +96,10 @@ func TestHostsFallback(t *testing.T) {
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteHostsFallback(path, []string{"gw.localhost", "app.localhost"}); err != nil {
+	if err := WriteHostsFallback(path, []string{"prox.localhost", "app.localhost"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteHostsFallback(path, []string{"gw.localhost", "app.localhost"}); err != nil {
+	if err := WriteHostsFallback(path, []string{"prox.localhost", "app.localhost"}); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(path)

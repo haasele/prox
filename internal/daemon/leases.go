@@ -80,8 +80,9 @@ func (d *Daemon) CreateLease(ctx context.Context, req api.LeaseRequest) (*api.Le
 	if collision {
 		d.Reg.AddEvent("warn", "collision", fmt.Sprintf("lease host renamed to %s", host), map[string]any{"host": host, "name": name})
 	}
-	d.Reg.AddEvent("info", "lease", fmt.Sprintf("%s -> 127.0.0.1:%d (pid %d)", host, port, req.PID), map[string]any{
-		"lease": lease.ID, "host": host, "port": port, "pid": req.PID, "command": req.Command,
+	d.Reg.AddEvent("info", "lease", policy.RouteDescription(name, "http", host, port, 443, d.Cfg.HTTPSPort), map[string]any{
+		"lease": lease.ID, "host": host, "url": policy.RouteURL("http", host, 443, d.Cfg.HTTPSPort),
+		"port": port, "source_port": port, "pid": req.PID, "command": req.Command,
 	})
 	if req.PID > 0 {
 		d.startLeaseWatch(lease.ID, req.PID)

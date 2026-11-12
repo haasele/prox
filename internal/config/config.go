@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -38,6 +39,11 @@ type Config struct {
 	DockerSocket     string
 	Backend          string
 	Enforcement      bool
+	OriginalHints    bool
+	Discover         bool
+	DiscoverExisting bool
+	OwnHTTPPorts     []int
+	OwnTCPPorts      []int
 	LogLevel         string
 	ProjectDomain    string
 	SocketGroup      string
@@ -69,6 +75,27 @@ func envBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// envPorts parses a comma-separated port list, dropping invalid and duplicate
+// entries and preserving ascending order.
+func envPorts(key string) []int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	seen := map[int]bool{}
+	var out []int
+	for _, part := range strings.Split(raw, ",") {
+		port, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || port < 1 || port > 65535 || seen[port] {
+			continue
+		}
+		seen[port] = true
+		out = append(out, port)
+	}
+	sort.Ints(out)
+	return out
 }
 
 // Load builds the effective configuration. When running as root (system
@@ -125,6 +152,11 @@ func Load() (*Config, error) {
 		GatewayPortEnd:   envInt("PROX_GATEWAY_PORT_END", 29999),
 		Backend:          env("PROX_BACKEND", "auto"),
 		Enforcement:      envBool("PROX_ENFORCE", false),
+		OriginalHints:    envBool("PROX_ORIGINAL_HINTS", true),
+		Discover:         envBool("PROX_DISCOVER", true),
+		DiscoverExisting: envBool("PROX_DISCOVER_EXISTING", false),
+		OwnHTTPPorts:     envPorts("PROX_OWN_HTTP_PORTS"),
+		OwnTCPPorts:      envPorts("PROX_OWN_TCP_PORTS"),
 		ProjectDomain:    env("PROX_DOMAIN", "localhost"),
 		SocketGroup:      env("PROX_SOCKET_GROUP", map[bool]string{true: "docker", false: ""}[system]),
 	}

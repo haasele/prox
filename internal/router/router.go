@@ -132,7 +132,7 @@ func BuildConfig(in Input) ([]byte, error) {
 		in.TLSLoopbackPort = in.HTTPSPort + 1
 	}
 	if in.DashboardHost == "" {
-		in.DashboardHost = "gw.localhost"
+		in.DashboardHost = "prox.localhost"
 	}
 	dashURL := in.DashboardURL
 	if dashURL == "" {
@@ -181,32 +181,24 @@ func BuildConfig(in Input) ([]byte, error) {
 		"automatic_https":         map[string]any{"disable_redirects": true},
 	}
 
-	// Plain HTTP: per-host redirects (or direct proxying when a rule disables
-	// the redirect), then a catch-all redirect.
+	// Plain HTTP: per-host redirects, direct proxying when a rule disables the
+	// redirect, and a 503 for hosts that prox does not know.
 	plainRoutes := []any{}
-	for _, r := range httpRoutes {
-		if r.Redirect {
-			continue
-		}
-		if r.Status == "up" && r.Upstream != "" {
-			plainRoutes = append(plainRoutes, hostRoute(r.Host, reverseProxy(r.Upstream)))
-		} else {
-			plainRoutes = append(plainRoutes, hostRoute(r.Host, staticPage(503, page)))
-		}
-	}
 	hostSuffix := ""
 	if in.HTTPSPort != 443 {
 		hostSuffix = fmt.Sprintf(":%d", in.HTTPSPort)
 	}
-	plainRoutes = append(plainRoutes, map[string]any{
-		"handle": []any{map[string]any{
-			"handler":     "static_response",
-			"status_code": 308,
-			"headers": map[string]any{
-				"Location": []string{"https://{http.request.host}" + hostSuffix + "{http.request.uri}"},
-			},
-		}},
-	})
+	for _, r := range httpRoutes {
+		switch {
+		case r.Status == "up" && r.Upstream != "" && !r.Redirect:
+			plainRoutes = append(plainRoutes, hostRoute(r.Host, reverseProxy(r.Upstream)))
+		case r.Status == "up" && r.Upstream != "":
+			plainRoutes = append(plainRoutes, hostRoute(r.Host, redirectHandler(hostSuffix)))
+		default:
+			plainRoutes = append(plainRoutes, hostRoute(r.Host, staticPage(503, page)))
+		}
+	}
+	plainRoutes = append(plainRoutes, map[string]any{"handle": []any{staticPage(503, page)}})
 	httpServer := map[string]any{
 		"listen":          []string{fmt.Sprintf(":%d", in.HTTPPort)},
 		"routes":          plainRoutes,
@@ -308,6 +300,16 @@ func reverseProxy(upstream string) map[string]any {
 		"handler":        "reverse_proxy",
 		"upstreams":      []any{map[string]any{"dial": upstream}},
 		"flush_interval": -1,
+	}
+}
+
+func redirectHandler(hostSuffix string) map[string]any {
+	return map[string]any{
+		"handler":     "static_response",
+		"status_code": 308,
+		"headers": map[string]any{
+			"Location": []string{"https://{http.request.host}" + hostSuffix + "{http.request.uri}"},
+		},
 	}
 }
 

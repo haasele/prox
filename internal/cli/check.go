@@ -20,6 +20,7 @@ type checkOutcome struct {
 	Action      string `json:"action"`
 	Status      string `json:"status"`
 	Host        string `json:"host"`
+	URL         string `json:"url"`
 	Proto       string `json:"proto"`
 	SourcePort  int    `json:"source_port"`
 	GatewayPort int    `json:"gateway_port"`
@@ -78,7 +79,7 @@ func newCheckCmd() *cobra.Command {
 			}
 			fmt.Printf("project %s\n\n", resp.Project)
 			tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "SERVICE\tIMAGE\tACTION\tHOST\tCONTAINER\tGATEWAY\tRULE\tDETAIL")
+			fmt.Fprintln(tw, "SERVICE\tIMAGE\tACTION\tHOST\tURL\tCONTAINER\tGATEWAY\tRULE\tDETAIL")
 			for _, s := range resp.Services {
 				host := s.Host
 				if host == "" {
@@ -86,6 +87,10 @@ func newCheckCmd() *cobra.Command {
 				}
 				if s.Collision {
 					host += " !"
+				}
+				url := s.URL
+				if url == "" {
+					url = "—"
 				}
 				container := "—"
 				if s.SourcePort > 0 {
@@ -102,7 +107,7 @@ func newCheckCmd() *cobra.Command {
 				if s.RuleID > 0 {
 					rule = strconv.FormatInt(s.RuleID, 10)
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Service, s.Image, s.Status, host, container, gateway, rule, s.Reason)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Service, s.Image, s.Status, host, url, container, gateway, rule, s.Reason)
 			}
 			tw.Flush()
 			for _, s := range resp.Services {

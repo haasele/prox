@@ -46,8 +46,8 @@ detection (Debian/Fedora/Arch/openSUSE/Alpine + NSS).
 
 After install:
   export DOCKER_HOST=unix:///run/prox/docker.sock   # done for new shells
-  gw doctor
-  open https://gw.localhost
+  prox doctor
+  open https://prox.localhost
 
 Uninstall:
   ./install.sh --uninstall
@@ -305,21 +305,21 @@ install_docs() {
 }
 
 install_completions() {
-	gw="$PREFIX/bin/gw"
+	prox="$PREFIX/bin/prox"
 	mkdir -p "$PREFIX/share/bash-completion/completions" \
 		"$PREFIX/share/zsh/site-functions" \
 		"$PREFIX/share/fish/vendor_completions.d"
-	"$gw" completions bash > "$TMP/gw.bash" 2>/dev/null || warn "bash completions unavailable"
-	if [ -s "$TMP/gw.bash" ]; then
-		put_file "$TMP/gw.bash" "$PREFIX/share/bash-completion/completions/gw" 0644
+	"$prox" completions bash > "$TMP/prox.bash" 2>/dev/null || warn "bash completions unavailable"
+	if [ -s "$TMP/prox.bash" ]; then
+		put_file "$TMP/prox.bash" "$PREFIX/share/bash-completion/completions/prox" 0644
 	fi
-	"$gw" completions zsh > "$TMP/_gw" 2>/dev/null || true
-	if [ -s "$TMP/_gw" ]; then
-		put_file "$TMP/_gw" "$PREFIX/share/zsh/site-functions/_gw" 0644
+	"$prox" completions zsh > "$TMP/_prox" 2>/dev/null || true
+	if [ -s "$TMP/_prox" ]; then
+		put_file "$TMP/_prox" "$PREFIX/share/zsh/site-functions/_prox" 0644
 	fi
-	"$gw" completions fish > "$TMP/gw.fish" 2>/dev/null || true
-	if [ -s "$TMP/gw.fish" ]; then
-		put_file "$TMP/gw.fish" "$PREFIX/share/fish/vendor_completions.d/gw.fish" 0644
+	"$prox" completions fish > "$TMP/prox.fish" 2>/dev/null || true
+	if [ -s "$TMP/prox.fish" ]; then
+		put_file "$TMP/prox.fish" "$PREFIX/share/fish/vendor_completions.d/prox.fish" 0644
 	fi
 }
 
@@ -471,7 +471,7 @@ EOF
 wait_ready() {
 	i=0
 	while [ "$i" -lt 60 ]; do
-		if [ -S /run/prox/api.sock ] && "$PREFIX/bin/gw" ls >/dev/null 2>&1; then
+		if [ -S /run/prox/api.sock ] && "$PREFIX/bin/prox" ls >/dev/null 2>&1; then
 			return 0
 		fi
 		i=$((i + 1))
@@ -482,23 +482,23 @@ wait_ready() {
 
 install_ca() {
 	[ "$DO_CA" -eq 1 ] || return 0
-	[ -S /run/prox/api.sock ] || { warn "daemon is not running; run '$PREFIX/bin/gw ca install' later"; return 0; }
+	[ -S /run/prox/api.sock ] || { warn "daemon is not running; run '$PREFIX/bin/prox ca install' later"; return 0; }
 	info "installing the prox local CA"
-	"$PREFIX/bin/gw" ca install || warn "CA installation reported problems; run '$PREFIX/bin/gw ca install'"
+	"$PREFIX/bin/prox" ca install || warn "CA installation reported problems; run '$PREFIX/bin/prox ca install'"
 	if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && command -v sudo >/dev/null 2>&1; then
-		sudo -u "$SUDO_USER" -H "$PREFIX/bin/gw" ca install >/dev/null 2>&1 \
-			|| warn "could not add the CA to $SUDO_USER's browser NSS database; run 'gw ca install' as that user"
+		sudo -u "$SUDO_USER" -H "$PREFIX/bin/prox" ca install >/dev/null 2>&1 \
+			|| warn "could not add the CA to $SUDO_USER's browser NSS database; run 'prox ca install' as that user"
 	fi
 }
 
 doctor() {
-	if ! "$PREFIX/bin/gw" ls >/dev/null 2>&1; then
+	if ! "$PREFIX/bin/prox" ls >/dev/null 2>&1; then
 		return 0
 	fi
-	info "running gw doctor"
+	info "running prox doctor"
 	env DOCKER_HOST="unix:///run/prox/docker.sock" \
 		PROX_HTTP_PORT="$HTTP_PORT" PROX_HTTPS_PORT="$HTTPS_PORT" \
-		"$PREFIX/bin/gw" doctor || warn "gw doctor reported issues (see output above)"
+		"$PREFIX/bin/prox" doctor || warn "prox doctor reported issues (see output above)"
 }
 
 uninstall() {
@@ -525,20 +525,20 @@ uninstall() {
 	esac
 	fi
 
-	if [ "$IS_ROOT" -eq 1 ] && [ -x "$PREFIX/bin/gw" ]; then
+	if [ "$IS_ROOT" -eq 1 ] && [ -x "$PREFIX/bin/prox" ]; then
 		if [ "$DO_CA" -eq 1 ]; then
 			info "removing the CA from trust stores"
-			"$PREFIX/bin/gw" ca uninstall >/dev/null 2>&1 || true
+			"$PREFIX/bin/prox" ca uninstall >/dev/null 2>&1 || true
 			if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && command -v sudo >/dev/null 2>&1; then
-				sudo -u "$SUDO_USER" -H "$PREFIX/bin/gw" ca uninstall >/dev/null 2>&1 || true
+				sudo -u "$SUDO_USER" -H "$PREFIX/bin/prox" ca uninstall >/dev/null 2>&1 || true
 			fi
 		fi
 	fi
 
 	rm -f "$PREFIX/bin/prox" "$PREFIX/bin/gw" "$PREFIX/bin/proxd"
-	rm -f "$PREFIX/share/bash-completion/completions/gw" \
-		"$PREFIX/share/zsh/site-functions/_gw" \
-		"$PREFIX/share/fish/vendor_completions.d/gw.fish"
+	rm -f "$PREFIX/share/bash-completion/completions/prox" \
+		"$PREFIX/share/zsh/site-functions/_prox" \
+		"$PREFIX/share/fish/vendor_completions.d/prox.fish"
 	rm -rf "$PREFIX/share/doc/prox"
 	if [ "$IS_ROOT" -eq 1 ]; then
 		rm -f /etc/profile.d/prox.sh /etc/fish/conf.d/prox.fish
@@ -602,9 +602,9 @@ else
 	fi
 fi
 
-dashboard="https://gw.localhost"
+dashboard="https://prox.localhost"
 [ "$HTTPS_PORT" = "443" ] || dashboard="$dashboard:$HTTPS_PORT"
-installed_version=$("$PREFIX/bin/gw" version 2>/dev/null || version_string)
+installed_version=$("$PREFIX/bin/prox" version 2>/dev/null || version_string)
 info "installed $installed_version at $PREFIX/bin/prox"
 info "dashboard: $dashboard"
 if [ "$IS_ROOT" -eq 1 ]; then

@@ -1,6 +1,6 @@
-# bash completion for gw                                   -*- shell-script -*-
+# bash completion for prox                                 -*- shell-script -*-
 
-__gw_debug()
+__prox_debug()
 {
     if [[ -n ${BASH_COMP_DEBUG_FILE:-} ]]; then
         echo "$*" >> "${BASH_COMP_DEBUG_FILE}"
@@ -9,13 +9,13 @@ __gw_debug()
 
 # Homebrew on Macs have version 1.3 of bash-completion which doesn't include
 # _init_completion. This is a very minimal version of that function.
-__gw_init_completion()
+__prox_init_completion()
 {
     COMPREPLY=()
     _get_comp_words_by_ref "$@" cur prev words cword
 }
 
-__gw_index_of_word()
+__prox_index_of_word()
 {
     local w word=$1
     shift
@@ -27,7 +27,7 @@ __gw_index_of_word()
     index=-1
 }
 
-__gw_contains_word()
+__prox_contains_word()
 {
     local w word=$1; shift
     for w in "$@"; do
@@ -36,9 +36,9 @@ __gw_contains_word()
     return 1
 }
 
-__gw_handle_go_custom_completion()
+__prox_handle_go_custom_completion()
 {
-    __gw_debug "${FUNCNAME[0]}: cur is ${cur}, words[*] is ${words[*]}, #words[@] is ${#words[@]}"
+    __prox_debug "${FUNCNAME[0]}: cur is ${cur}, words[*] is ${words[*]}, #words[@] is ${#words[@]}"
 
     local shellCompDirectiveError=1
     local shellCompDirectiveNoSpace=2
@@ -49,23 +49,23 @@ __gw_handle_go_custom_completion()
     local out requestComp lastParam lastChar comp directive args
 
     # Prepare the command to request completions for the program.
-    # Calling ${words[0]} instead of directly gw allows handling aliases
+    # Calling ${words[0]} instead of directly prox allows handling aliases
     args=("${words[@]:1}")
     # Disable ActiveHelp which is not supported for bash completion v1
-    requestComp="GW_ACTIVE_HELP=0 ${words[0]} __completeNoDesc ${args[*]}"
+    requestComp="PROX_ACTIVE_HELP=0 ${words[0]} __completeNoDesc ${args[*]}"
 
     lastParam=${words[$((${#words[@]}-1))]}
     lastChar=${lastParam:$((${#lastParam}-1)):1}
-    __gw_debug "${FUNCNAME[0]}: lastParam ${lastParam}, lastChar ${lastChar}"
+    __prox_debug "${FUNCNAME[0]}: lastParam ${lastParam}, lastChar ${lastChar}"
 
     if [ -z "${cur}" ] && [ "${lastChar}" != "=" ]; then
         # If the last parameter is complete (there is a space following it)
         # We add an extra empty parameter so we can indicate this to the go method.
-        __gw_debug "${FUNCNAME[0]}: Adding extra empty parameter"
+        __prox_debug "${FUNCNAME[0]}: Adding extra empty parameter"
         requestComp="${requestComp} \"\""
     fi
 
-    __gw_debug "${FUNCNAME[0]}: calling ${requestComp}"
+    __prox_debug "${FUNCNAME[0]}: calling ${requestComp}"
     # Use eval to handle any environment variables and such
     out=$(eval "${requestComp}" 2>/dev/null)
 
@@ -77,23 +77,23 @@ __gw_handle_go_custom_completion()
         # There is not directive specified
         directive=0
     fi
-    __gw_debug "${FUNCNAME[0]}: the completion directive is: ${directive}"
-    __gw_debug "${FUNCNAME[0]}: the completions are: ${out}"
+    __prox_debug "${FUNCNAME[0]}: the completion directive is: ${directive}"
+    __prox_debug "${FUNCNAME[0]}: the completions are: ${out}"
 
     if [ $((directive & shellCompDirectiveError)) -ne 0 ]; then
         # Error code.  No completion.
-        __gw_debug "${FUNCNAME[0]}: received error from custom completion go code"
+        __prox_debug "${FUNCNAME[0]}: received error from custom completion go code"
         return
     else
         if [ $((directive & shellCompDirectiveNoSpace)) -ne 0 ]; then
             if [[ $(type -t compopt) = "builtin" ]]; then
-                __gw_debug "${FUNCNAME[0]}: activating no space"
+                __prox_debug "${FUNCNAME[0]}: activating no space"
                 compopt -o nospace
             fi
         fi
         if [ $((directive & shellCompDirectiveNoFileComp)) -ne 0 ]; then
             if [[ $(type -t compopt) = "builtin" ]]; then
-                __gw_debug "${FUNCNAME[0]}: activating no file completion"
+                __prox_debug "${FUNCNAME[0]}: activating no file completion"
                 compopt +o default
             fi
         fi
@@ -109,7 +109,7 @@ __gw_handle_go_custom_completion()
         done
 
         filteringCmd="_filedir $fullFilter"
-        __gw_debug "File filtering command: $filteringCmd"
+        __prox_debug "File filtering command: $filteringCmd"
         $filteringCmd
     elif [ $((directive & shellCompDirectiveFilterDirs)) -ne 0 ]; then
         # File completion for directories only
@@ -117,10 +117,10 @@ __gw_handle_go_custom_completion()
         # Use printf to strip any trailing newline
         subdir=$(printf "%s" "${out}")
         if [ -n "$subdir" ]; then
-            __gw_debug "Listing directories in $subdir"
-            __gw_handle_subdirs_in_dir_flag "$subdir"
+            __prox_debug "Listing directories in $subdir"
+            __prox_handle_subdirs_in_dir_flag "$subdir"
         else
-            __gw_debug "Listing directories in ."
+            __prox_debug "Listing directories in ."
             _filedir -d
         fi
     else
@@ -130,9 +130,9 @@ __gw_handle_go_custom_completion()
     fi
 }
 
-__gw_handle_reply()
+__prox_handle_reply()
 {
-    __gw_debug "${FUNCNAME[0]}"
+    __prox_debug "${FUNCNAME[0]}"
     local comp
     case $cur in
         -*)
@@ -160,7 +160,7 @@ __gw_handle_reply()
 
                 local index flag
                 flag="${cur%=*}"
-                __gw_index_of_word "${flag}" "${flags_with_completion[@]}"
+                __prox_index_of_word "${flag}" "${flags_with_completion[@]}"
                 COMPREPLY=()
                 if [[ ${index} -ge 0 ]]; then
                     PREFIX=""
@@ -184,7 +184,7 @@ __gw_handle_reply()
 
     # check if we are handling a flag with special work handling
     local index
-    __gw_index_of_word "${prev}" "${flags_with_completion[@]}"
+    __prox_index_of_word "${prev}" "${flags_with_completion[@]}"
     if [[ ${index} -ge 0 ]]; then
         ${flags_completion[${index}]}
         return
@@ -201,7 +201,7 @@ __gw_handle_reply()
         completions+=("${must_have_one_noun[@]}")
     elif [[ -n "${has_completion_function}" ]]; then
         # if a go completion function is provided, defer to that function
-        __gw_handle_go_custom_completion
+        __prox_handle_go_custom_completion
     fi
     if [[ ${#must_have_one_flag[@]} -ne 0 ]]; then
         completions+=("${must_have_one_flag[@]}")
@@ -217,9 +217,9 @@ __gw_handle_reply()
     fi
 
     if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
-        if declare -F __gw_custom_func >/dev/null; then
+        if declare -F __prox_custom_func >/dev/null; then
             # try command name qualified custom func
-            __gw_custom_func
+            __prox_custom_func
         else
             # otherwise fall back to unqualified for compatibility
             declare -F __custom_func >/dev/null && __custom_func
@@ -239,21 +239,21 @@ __gw_handle_reply()
 }
 
 # The arguments should be in the form "ext1|ext2|extn"
-__gw_handle_filename_extension_flag()
+__prox_handle_filename_extension_flag()
 {
     local ext="$1"
     _filedir "@(${ext})"
 }
 
-__gw_handle_subdirs_in_dir_flag()
+__prox_handle_subdirs_in_dir_flag()
 {
     local dir="$1"
     pushd "${dir}" >/dev/null 2>&1 && _filedir -d && popd >/dev/null 2>&1 || return
 }
 
-__gw_handle_flag()
+__prox_handle_flag()
 {
-    __gw_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+    __prox_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
 
     # if a command required a flag, and we found it, unset must_have_one_flag()
     local flagname=${words[c]}
@@ -264,13 +264,13 @@ __gw_handle_flag()
         flagname=${flagname%=*} # strip everything after the =
         flagname="${flagname}=" # but put the = back
     fi
-    __gw_debug "${FUNCNAME[0]}: looking for ${flagname}"
-    if __gw_contains_word "${flagname}" "${must_have_one_flag[@]}"; then
+    __prox_debug "${FUNCNAME[0]}: looking for ${flagname}"
+    if __prox_contains_word "${flagname}" "${must_have_one_flag[@]}"; then
         must_have_one_flag=()
     fi
 
     # if you set a flag which only applies to this command, don't show subcommands
-    if __gw_contains_word "${flagname}" "${local_nonpersistent_flags[@]}"; then
+    if __prox_contains_word "${flagname}" "${local_nonpersistent_flags[@]}"; then
       commands=()
     fi
 
@@ -287,8 +287,8 @@ __gw_handle_flag()
     fi
 
     # skip the argument to a two word flag
-    if [[ ${words[c]} != *"="* ]] && __gw_contains_word "${words[c]}" "${two_word_flags[@]}"; then
-        __gw_debug "${FUNCNAME[0]}: found a flag ${words[c]}, skip the next argument"
+    if [[ ${words[c]} != *"="* ]] && __prox_contains_word "${words[c]}" "${two_word_flags[@]}"; then
+        __prox_debug "${FUNCNAME[0]}: found a flag ${words[c]}, skip the next argument"
         c=$((c+1))
         # if we are looking for a flags value, don't show commands
         if [[ $c -eq $cword ]]; then
@@ -300,13 +300,13 @@ __gw_handle_flag()
 
 }
 
-__gw_handle_noun()
+__prox_handle_noun()
 {
-    __gw_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+    __prox_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
 
-    if __gw_contains_word "${words[c]}" "${must_have_one_noun[@]}"; then
+    if __prox_contains_word "${words[c]}" "${must_have_one_noun[@]}"; then
         must_have_one_noun=()
-    elif __gw_contains_word "${words[c]}" "${noun_aliases[@]}"; then
+    elif __prox_contains_word "${words[c]}" "${noun_aliases[@]}"; then
         must_have_one_noun=()
     fi
 
@@ -314,55 +314,55 @@ __gw_handle_noun()
     c=$((c+1))
 }
 
-__gw_handle_command()
+__prox_handle_command()
 {
-    __gw_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+    __prox_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
 
     local next_command
     if [[ -n ${last_command} ]]; then
         next_command="_${last_command}_${words[c]//:/__}"
     else
         if [[ $c -eq 0 ]]; then
-            next_command="_gw_root_command"
+            next_command="_prox_root_command"
         else
             next_command="_${words[c]//:/__}"
         fi
     fi
     c=$((c+1))
-    __gw_debug "${FUNCNAME[0]}: looking for ${next_command}"
+    __prox_debug "${FUNCNAME[0]}: looking for ${next_command}"
     declare -F "$next_command" >/dev/null && $next_command
 }
 
-__gw_handle_word()
+__prox_handle_word()
 {
     if [[ $c -ge $cword ]]; then
-        __gw_handle_reply
+        __prox_handle_reply
         return
     fi
-    __gw_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+    __prox_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
     if [[ "${words[c]}" == -* ]]; then
-        __gw_handle_flag
-    elif __gw_contains_word "${words[c]}" "${commands[@]}"; then
-        __gw_handle_command
+        __prox_handle_flag
+    elif __prox_contains_word "${words[c]}" "${commands[@]}"; then
+        __prox_handle_command
     elif [[ $c -eq 0 ]]; then
-        __gw_handle_command
-    elif __gw_contains_word "${words[c]}" "${command_aliases[@]}"; then
+        __prox_handle_command
+    elif __prox_contains_word "${words[c]}" "${command_aliases[@]}"; then
         # aliashash variable is an associative array which is only supported in bash > 3.
         if [[ -z "${BASH_VERSION:-}" || "${BASH_VERSINFO[0]:-}" -gt 3 ]]; then
             words[c]=${aliashash[${words[c]}]}
-            __gw_handle_command
+            __prox_handle_command
         else
-            __gw_handle_noun
+            __prox_handle_noun
         fi
     else
-        __gw_handle_noun
+        __prox_handle_noun
     fi
-    __gw_handle_word
+    __prox_handle_word
 }
 
-_gw_allow()
+_prox_allow()
 {
-    last_command="gw_allow"
+    last_command="prox_allow"
 
     command_aliases=()
 
@@ -412,9 +412,9 @@ _gw_allow()
     noun_aliases=()
 }
 
-_gw_ca_install()
+_prox_ca_install()
 {
-    last_command="gw_ca_install"
+    last_command="prox_ca_install"
 
     command_aliases=()
 
@@ -432,9 +432,9 @@ _gw_ca_install()
     noun_aliases=()
 }
 
-_gw_ca_show()
+_prox_ca_show()
 {
-    last_command="gw_ca_show"
+    last_command="prox_ca_show"
 
     command_aliases=()
 
@@ -452,9 +452,9 @@ _gw_ca_show()
     noun_aliases=()
 }
 
-_gw_ca_uninstall()
+_prox_ca_uninstall()
 {
-    last_command="gw_ca_uninstall"
+    last_command="prox_ca_uninstall"
 
     command_aliases=()
 
@@ -472,9 +472,9 @@ _gw_ca_uninstall()
     noun_aliases=()
 }
 
-_gw_ca()
+_prox_ca()
 {
-    last_command="gw_ca"
+    last_command="prox_ca"
 
     command_aliases=()
 
@@ -495,9 +495,9 @@ _gw_ca()
     noun_aliases=()
 }
 
-_gw_check()
+_prox_check()
 {
-    last_command="gw_check"
+    last_command="prox_check"
 
     command_aliases=()
 
@@ -523,9 +523,9 @@ _gw_check()
     noun_aliases=()
 }
 
-_gw_completion_bash()
+_prox_completion_bash()
 {
-    last_command="gw_completion_bash"
+    last_command="prox_completion_bash"
 
     command_aliases=()
 
@@ -546,9 +546,9 @@ _gw_completion_bash()
     noun_aliases=()
 }
 
-_gw_completion_fish()
+_prox_completion_fish()
 {
-    last_command="gw_completion_fish"
+    last_command="prox_completion_fish"
 
     command_aliases=()
 
@@ -569,9 +569,9 @@ _gw_completion_fish()
     noun_aliases=()
 }
 
-_gw_completion_powershell()
+_prox_completion_powershell()
 {
-    last_command="gw_completion_powershell"
+    last_command="prox_completion_powershell"
 
     command_aliases=()
 
@@ -592,9 +592,9 @@ _gw_completion_powershell()
     noun_aliases=()
 }
 
-_gw_completion_zsh()
+_prox_completion_zsh()
 {
-    last_command="gw_completion_zsh"
+    last_command="prox_completion_zsh"
 
     command_aliases=()
 
@@ -615,9 +615,9 @@ _gw_completion_zsh()
     noun_aliases=()
 }
 
-_gw_completion()
+_prox_completion()
 {
-    last_command="gw_completion"
+    last_command="prox_completion"
 
     command_aliases=()
 
@@ -640,9 +640,9 @@ _gw_completion()
     noun_aliases=()
 }
 
-_gw_completions_bash()
+_prox_completions_bash()
 {
-    last_command="gw_completions_bash"
+    last_command="prox_completions_bash"
 
     command_aliases=()
 
@@ -664,9 +664,9 @@ _gw_completions_bash()
     noun_aliases=()
 }
 
-_gw_completions_fish()
+_prox_completions_fish()
 {
-    last_command="gw_completions_fish"
+    last_command="prox_completions_fish"
 
     command_aliases=()
 
@@ -684,9 +684,9 @@ _gw_completions_fish()
     noun_aliases=()
 }
 
-_gw_completions_man()
+_prox_completions_man()
 {
-    last_command="gw_completions_man"
+    last_command="prox_completions_man"
 
     command_aliases=()
 
@@ -704,9 +704,9 @@ _gw_completions_man()
     noun_aliases=()
 }
 
-_gw_completions_zsh()
+_prox_completions_zsh()
 {
-    last_command="gw_completions_zsh"
+    last_command="prox_completions_zsh"
 
     command_aliases=()
 
@@ -724,9 +724,9 @@ _gw_completions_zsh()
     noun_aliases=()
 }
 
-_gw_completions()
+_prox_completions()
 {
-    last_command="gw_completions"
+    last_command="prox_completions"
 
     command_aliases=()
 
@@ -748,9 +748,9 @@ _gw_completions()
     noun_aliases=()
 }
 
-_gw_deny()
+_prox_deny()
 {
-    last_command="gw_deny"
+    last_command="prox_deny"
 
     command_aliases=()
 
@@ -772,9 +772,9 @@ _gw_deny()
     noun_aliases=()
 }
 
-_gw_doctor()
+_prox_doctor()
 {
-    last_command="gw_doctor"
+    last_command="prox_doctor"
 
     command_aliases=()
 
@@ -798,9 +798,9 @@ _gw_doctor()
     noun_aliases=()
 }
 
-_gw_enforce_off()
+_prox_enforce_off()
 {
-    last_command="gw_enforce_off"
+    last_command="prox_enforce_off"
 
     command_aliases=()
 
@@ -818,9 +818,9 @@ _gw_enforce_off()
     noun_aliases=()
 }
 
-_gw_enforce_on()
+_prox_enforce_on()
 {
-    last_command="gw_enforce_on"
+    last_command="prox_enforce_on"
 
     command_aliases=()
 
@@ -838,9 +838,9 @@ _gw_enforce_on()
     noun_aliases=()
 }
 
-_gw_enforce_status()
+_prox_enforce_status()
 {
-    last_command="gw_enforce_status"
+    last_command="prox_enforce_status"
 
     command_aliases=()
 
@@ -858,9 +858,9 @@ _gw_enforce_status()
     noun_aliases=()
 }
 
-_gw_enforce()
+_prox_enforce()
 {
-    last_command="gw_enforce"
+    last_command="prox_enforce"
 
     command_aliases=()
 
@@ -881,9 +881,9 @@ _gw_enforce()
     noun_aliases=()
 }
 
-_gw_events()
+_prox_events()
 {
-    last_command="gw_events"
+    last_command="prox_events"
 
     command_aliases=()
 
@@ -915,9 +915,9 @@ _gw_events()
     noun_aliases=()
 }
 
-_gw_help()
+_prox_help()
 {
-    last_command="gw_help"
+    last_command="prox_help"
 
     command_aliases=()
 
@@ -936,9 +936,9 @@ _gw_help()
     noun_aliases=()
 }
 
-_gw_ls()
+_prox_ls()
 {
-    last_command="gw_ls"
+    last_command="prox_ls"
 
     command_aliases=()
 
@@ -960,9 +960,9 @@ _gw_ls()
     noun_aliases=()
 }
 
-_gw_policy_set()
+_prox_policy_set()
 {
-    last_command="gw_policy_set"
+    last_command="prox_policy_set"
 
     command_aliases=()
 
@@ -980,9 +980,9 @@ _gw_policy_set()
     noun_aliases=()
 }
 
-_gw_policy_show()
+_prox_policy_show()
 {
-    last_command="gw_policy_show"
+    last_command="prox_policy_show"
 
     command_aliases=()
 
@@ -1000,9 +1000,9 @@ _gw_policy_show()
     noun_aliases=()
 }
 
-_gw_policy()
+_prox_policy()
 {
-    last_command="gw_policy"
+    last_command="prox_policy"
 
     command_aliases=()
 
@@ -1022,9 +1022,9 @@ _gw_policy()
     noun_aliases=()
 }
 
-_gw_rm()
+_prox_rm()
 {
-    last_command="gw_rm"
+    last_command="prox_rm"
 
     command_aliases=()
 
@@ -1042,9 +1042,9 @@ _gw_rm()
     noun_aliases=()
 }
 
-_gw_run()
+_prox_run()
 {
-    last_command="gw_run"
+    last_command="prox_run"
 
     command_aliases=()
 
@@ -1078,9 +1078,9 @@ _gw_run()
     noun_aliases=()
 }
 
-_gw_version()
+_prox_version()
 {
-    last_command="gw_version"
+    last_command="prox_version"
 
     command_aliases=()
 
@@ -1098,9 +1098,9 @@ _gw_version()
     noun_aliases=()
 }
 
-_gw_root_command()
+_prox_root_command()
 {
-    last_command="gw"
+    last_command="prox"
 
     command_aliases=()
 
@@ -1133,7 +1133,7 @@ _gw_root_command()
     noun_aliases=()
 }
 
-__start_gw()
+__start_prox()
 {
     local cur prev words cword split
     declare -A flaghash 2>/dev/null || :
@@ -1141,7 +1141,7 @@ __start_gw()
     if declare -F _init_completion >/dev/null 2>&1; then
         _init_completion -s || return
     else
-        __gw_init_completion -n "=" || return
+        __prox_init_completion -n "=" || return
     fi
 
     local c=0
@@ -1151,7 +1151,7 @@ __start_gw()
     local local_nonpersistent_flags=()
     local flags_with_completion=()
     local flags_completion=()
-    local commands=("gw")
+    local commands=("prox")
     local command_aliases=()
     local must_have_one_flag=()
     local must_have_one_noun=()
@@ -1160,13 +1160,13 @@ __start_gw()
     local nouns=()
     local noun_aliases=()
 
-    __gw_handle_word
+    __prox_handle_word
 }
 
 if [[ $(type -t compopt) = "builtin" ]]; then
-    complete -o default -F __start_gw gw
+    complete -o default -F __start_prox prox
 else
-    complete -o default -o nospace -F __start_gw gw
+    complete -o default -o nospace -F __start_prox prox
 fi
 
 # ex: ts=4 sw=4 et filetype=sh

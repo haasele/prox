@@ -187,9 +187,9 @@ func (s *Server) evaluate(req Request) Response {
 		name = strings.TrimPrefix(info.Name, "/")
 	}
 	ports := portKeys(bindings)
-	hint := "gw allow " + name + " --publish"
+	hint := "prox allow " + name + " --publish"
 	if len(ports) > 0 {
-		hint = fmt.Sprintf("gw allow %s --source %s --publish", name, strings.Split(ports[0], "/")[0])
+		hint = fmt.Sprintf("prox allow %s --source %s --publish", name, strings.Split(ports[0], "/")[0])
 	}
 	what := "direct host port binding"
 	if len(ports) == 0 && hostNet {

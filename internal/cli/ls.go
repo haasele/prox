@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
+	"github.com/haasele/prox/internal/policy"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +55,8 @@ type statusJSON struct {
 	Rules        int    `json:"rules"`
 	Leases       int    `json:"leases"`
 	DashboardURL string `json:"dashboard_url"`
+	OwnHTTPPorts []int  `json:"own_http_ports"`
+	OwnTCPPorts  []int  `json:"own_tcp_ports"`
 }
 
 type containersJSON struct {
@@ -116,7 +120,11 @@ func printLs(st statusJSON, rules []ruleJSON, routes []routeJSON, leases []lease
 		enf = "on"
 	}
 	fmt.Printf("policy %s   backend %s   docker %s   enforcement %s\n", st.Policy, st.Backend, docker, enf)
-	fmt.Printf("dashboard %s\n\n", st.DashboardURL)
+	fmt.Printf("dashboard %s\n", st.DashboardURL)
+	if len(st.OwnHTTPPorts) > 0 || len(st.OwnTCPPorts) > 0 {
+		fmt.Printf("owned http %s   owned tcp %s\n", portList(st.OwnHTTPPorts), portList(st.OwnTCPPorts))
+	}
+	fmt.Println()
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "RULES")
@@ -146,14 +154,17 @@ func printLs(st statusJSON, rules []ruleJSON, routes []routeJSON, leases []lease
 	fmt.Fprintln(tw)
 
 	fmt.Fprintln(tw, "ROUTES")
-	fmt.Fprintln(tw, "ID\tHOST\tPROTO\tUPSTREAM\tPORT\tSTATUS\tSERVICE\tPROJECT")
+	fmt.Fprintln(tw, "ID\tHOST\tURL (via prox)\tPORT\tUPSTREAM\tSTATUS\tSERVICE\tPROJECT")
 	if len(routes) == 0 {
 		fmt.Fprintln(tw, "—\t(no routes)\t\t\t\t\t\t")
 	}
 	for _, r := range routes {
-		port := "—"
+		port := "auto"
+		if r.SourcePort > 0 {
+			port = strconv.Itoa(r.SourcePort)
+		}
 		if r.GatewayPort > 0 {
-			port = strconv.Itoa(r.GatewayPort)
+			port += "→" + strconv.Itoa(r.GatewayPort)
 		}
 		upstream := r.TargetAddr
 		if upstream == "" {
@@ -163,7 +174,8 @@ func printLs(st statusJSON, rules []ruleJSON, routes []routeJSON, leases []lease
 		if r.Collision {
 			host += " !"
 		}
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, host, r.Proto, upstream, port, r.Status, r.Service, r.Project)
+		url := policy.RouteURL(r.Proto, r.Host, r.GatewayPort, st.HTTPSPort)
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, host, url, port, upstream, r.Status, r.Service, r.Project)
 	}
 	fmt.Fprintln(tw)
 
@@ -187,6 +199,17 @@ func printLs(st statusJSON, rules []ruleJSON, routes []routeJSON, leases []lease
 		fmt.Println("\nDOCKER ERROR")
 		fmt.Println("  " + st.DockerError)
 	}
+}
+
+func portList(ports []int) string {
+	if len(ports) == 0 {
+		return "—"
+	}
+	parts := make([]string, len(ports))
+	for i, p := range ports {
+		parts[i] = strconv.Itoa(p)
+	}
+	return strings.Join(parts, ",")
 }
 
 func truncate(s string, n int) string {

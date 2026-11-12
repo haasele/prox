@@ -236,6 +236,20 @@ func (r *Registry) CreateRule(rule *Rule) error {
 	return nil
 }
 
+func (r *Registry) UpdateRule(rule *Rule) (bool, error) {
+	if rule.Action == "" {
+		return false, errors.New("rule action is required")
+	}
+	res, err := r.DB.Exec(`UPDATE rules SET name=?,project=?,source_port=?,target_port=?,resolve=?,proto=?,action=?,redirect=?,target_explicit=? WHERE id=?`,
+		rule.Name, rule.Project, rule.Source, rule.Target, rule.Resolve, rule.Proto, rule.Action,
+		boolInt(rule.Redirect), boolInt(rule.TargetExplicit), rule.ID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 func (r *Registry) ListRules() ([]Rule, error) {
 	rows, err := r.DB.Query(`SELECT id,name,project,source_port,target_port,resolve,proto,action,redirect,target_explicit,created_at FROM rules ORDER BY id`)
 	if err != nil {

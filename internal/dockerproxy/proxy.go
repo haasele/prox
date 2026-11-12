@@ -54,6 +54,7 @@ type Config struct {
 	RealSocket  string
 	ProxySocket string
 	Domain      string
+	HTTPSPort   int
 	SignKey     []byte
 	SocketGroup string
 }
@@ -349,9 +350,10 @@ func (p *Proxy) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	p.reg.AddEvent("info", "rewrite", fmt.Sprintf("%s -> %s (%s)", containerLabel(info), host, decision.Proto), map[string]any{
+	url := policy.RouteURL(decision.Proto, host, decision.TargetPort, p.cfg.HTTPSPort)
+	p.reg.AddEvent("info", "rewrite", policy.RouteDescription(containerLabel(info), decision.Proto, host, decision.SourcePort, decision.TargetPort, p.cfg.HTTPSPort), map[string]any{
 		"container": info.Name, "project": info.Project, "service": info.Service, "image": info.Image,
-		"host": host, "source_port": decision.SourcePort, "gateway_port": decision.TargetPort,
+		"host": host, "url": url, "source_port": decision.SourcePort, "gateway_port": decision.TargetPort,
 		"proto": decision.Proto, "rule": decision.RuleID, "collision": collision,
 	})
 	p.forwardCreate(w, r, original, rewritten, &decision, info)
@@ -497,7 +499,7 @@ func (p *Proxy) addExtraHosts(hostConfig map[string]any, d policy.Decision) erro
 		seen[name] = true
 		hosts = append(hosts, name+":"+ip)
 	}
-	add("gw.localhost", "host-gateway")
+	add("prox.localhost", "host-gateway")
 	gw := p.GatewayAddr()
 	if gw != "" {
 		add("host.docker.internal", gw)
@@ -579,11 +581,34 @@ func (p *Proxy) forwardCreate(w http.ResponseWriter, r *http.Request, original, 
 		}
 		if json.Unmarshal(respBody, &cr) == nil && cr.ID != "" {
 			p.persistCreate(r, cr.ID, original, body, d, info)
+			if d.Action == policy.ActionRouteHTTP || d.Action == policy.ActionRouteTCP {
+				msg := policy.RouteDescription(containerLabel(info), d.Proto, d.Host, d.SourcePort, d.TargetPort, p.cfg.HTTPSPort)
+				respBody = appendCreateWarning(respBody, msg)
+			}
 		}
 	} else if d != nil && d.Proto == "tcp" && d.TargetPort != 443 && resp.StatusCode >= 300 {
 		p.Alloc.Release(p.portKey(info.Name, d.SourcePort))
 	}
 	copyResponse(w, resp, respBody)
+}
+
+// appendCreateWarning surfaces the route in Docker's create response so
+// `docker run`/`create` prints where the covered port is now served.
+func appendCreateWarning(body []byte, warning string) []byte {
+	if warning == "" {
+		return body
+	}
+	var obj map[string]any
+	if json.Unmarshal(body, &obj) != nil {
+		return body
+	}
+	warnings, _ := obj["Warnings"].([]any)
+	obj["Warnings"] = append(warnings, warning)
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return body
+	}
+	return b
 }
 
 func (p *Proxy) persistCreate(r *http.Request, id string, original, rewritten []byte, d *policy.Decision, info policy.CreateInfo) {

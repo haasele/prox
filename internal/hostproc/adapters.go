@@ -8,10 +8,11 @@ import (
 )
 
 type Adapter struct {
-	Name       string
-	Flags      []string // {port} and {host} are substituted
-	Positional string   // appended as one argument, e.g. 127.0.0.1:{port}
-	EnvOnly    bool
+	Name        string
+	DefaultPort int      // conventional dev port, used for an original-port hint
+	Flags       []string // {port} and {host} are substituted
+	Positional  string   // appended as one argument, e.g. 127.0.0.1:{port}
+	EnvOnly     bool
 }
 
 type Detection struct {
@@ -22,19 +23,19 @@ type Detection struct {
 var viteFlags = []string{"--port", "{port}", "--host", "127.0.0.1"}
 
 var adapters = []Adapter{
-	{Name: "vite", Flags: viteFlags},
-	{Name: "next", Flags: []string{"-p", "{port}", "-H", "127.0.0.1"}},
-	{Name: "nuxt", Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
-	{Name: "sveltekit", Flags: viteFlags},
-	{Name: "astro", Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
-	{Name: "rails", Flags: []string{"-p", "{port}", "-b", "127.0.0.1"}},
-	{Name: "django", Positional: "127.0.0.1:{port}"},
-	{Name: "flask", Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
-	{Name: "uvicorn", Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
-	{Name: "express", EnvOnly: true},
-	{Name: "phoenix", EnvOnly: true},
-	{Name: "laravel", Flags: []string{"--port={port}", "--host=127.0.0.1"}},
-	{Name: "go", EnvOnly: true},
+	{Name: "vite", DefaultPort: 5173, Flags: viteFlags},
+	{Name: "next", DefaultPort: 3000, Flags: []string{"-p", "{port}", "-H", "127.0.0.1"}},
+	{Name: "nuxt", DefaultPort: 3000, Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
+	{Name: "sveltekit", DefaultPort: 5173, Flags: viteFlags},
+	{Name: "astro", DefaultPort: 4321, Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
+	{Name: "rails", DefaultPort: 3000, Flags: []string{"-p", "{port}", "-b", "127.0.0.1"}},
+	{Name: "django", DefaultPort: 8000, Positional: "127.0.0.1:{port}"},
+	{Name: "flask", DefaultPort: 5000, Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
+	{Name: "uvicorn", DefaultPort: 8000, Flags: []string{"--port", "{port}", "--host", "127.0.0.1"}},
+	{Name: "express", DefaultPort: 3000, EnvOnly: true},
+	{Name: "phoenix", DefaultPort: 4000, EnvOnly: true},
+	{Name: "laravel", DefaultPort: 8000, Flags: []string{"--port={port}", "--host=127.0.0.1"}},
+	{Name: "go", DefaultPort: 8080, EnvOnly: true},
 }
 
 func adapterByName(name string) Adapter {
@@ -43,7 +44,7 @@ func adapterByName(name string) Adapter {
 			return a
 		}
 	}
-	return Adapter{Name: "generic", EnvOnly: true}
+	return Adapter{Name: "generic", DefaultPort: 3000, EnvOnly: true}
 }
 
 type packageJSON struct {
@@ -143,7 +144,7 @@ func Detect(dir string, argv []string) Detection {
 	if exists(dir, "go.mod") {
 		return Detection{adapterByName("go"), "go.mod present"}
 	}
-	return Detection{Adapter{Name: "generic", EnvOnly: true}, "no framework detected; PORT/HOST environment only"}
+	return Detection{Adapter{Name: "generic", DefaultPort: 3000, EnvOnly: true}, "no framework detected; PORT/HOST environment only"}
 }
 
 // PortArgs computes the flag injection for a command. It understands npm/pnpm

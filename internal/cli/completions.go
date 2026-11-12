@@ -40,9 +40,9 @@ func newCompletionsCmd(root *cobra.Command) *cobra.Command {
 		Short: "Print a man page skeleton",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), ".TH GW 1")
+			fmt.Fprintln(cmd.OutOrStdout(), ".TH PROX 1")
 			fmt.Fprintln(cmd.OutOrStdout(), ".SH NAME")
-			fmt.Fprintln(cmd.OutOrStdout(), "gw \\- prox CLI and daemon")
+			fmt.Fprintln(cmd.OutOrStdout(), "prox \\- prox CLI and daemon")
 			return nil
 		},
 	})

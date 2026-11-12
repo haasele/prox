@@ -104,7 +104,7 @@ func newDoctorCmd() *cobra.Command {
 			return &exitError{code: 1, err: fmt.Errorf("prox doctor found problems")}
 		},
 	}
-	cmd.Flags().BoolVar(&fix, "fix", false, "apply safe fixes (DNS split config, CA install, gw network)")
+	cmd.Flags().BoolVar(&fix, "fix", false, "apply safe fixes (DNS split config, CA install, prox network)")
 	cmd.Flags().BoolVarP(&asJSON, "json", "j", false, "output JSON")
 	return cmd
 }

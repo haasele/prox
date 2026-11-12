@@ -126,6 +126,15 @@ type Harness struct {
 }
 
 func NewHarness(t *testing.T) *Harness {
+	return newHarness(t, false)
+}
+
+// NewHarnessWithOriginalHints enables the original-port redirect listeners.
+func NewHarnessWithOriginalHints(t *testing.T) *Harness {
+	return newHarness(t, true)
+}
+
+func newHarness(t *testing.T, originalHints bool) *Harness {
 	t.Helper()
 	requireDocker(t)
 	base := t.TempDir()
@@ -144,7 +153,7 @@ func NewHarness(t *testing.T) *Harness {
 	h.ProxySocket = filepath.Join(h.RuntimeDir, "docker.sock")
 	h.APISocket = filepath.Join(h.RuntimeDir, "api.sock")
 	h.AuthzSocket = filepath.Join(base, "authz.sock")
-	h.DashboardURL = fmt.Sprintf("https://gw.localhost:%d/", h.HTTPSPort)
+	h.DashboardURL = fmt.Sprintf("https://prox.localhost:%d/", h.HTTPSPort)
 	h.Env = append(os.Environ(),
 		"PROX_STATE_DIR="+h.StateDir,
 		"PROX_RUNTIME_DIR="+h.RuntimeDir,
@@ -161,6 +170,8 @@ func NewHarness(t *testing.T) *Harness {
 		"PROX_REAL_DOCKER_SOCKET="+dockerSocket(),
 		"PROX_LOG_LEVEL=debug",
 		"PROX_ENFORCE=false",
+		"PROX_ORIGINAL_HINTS="+map[bool]string{true: "1", false: "0"}[originalHints],
+		"PROX_DISCOVER=0",
 	)
 	h.client = &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -455,7 +466,7 @@ func (h *Harness) MustCLI(args ...string) string {
 	h.T.Helper()
 	out, errb, err := h.CLI(args...)
 	if err != nil {
-		h.T.Fatalf("gw %v: %v\nstdout: %s\nstderr: %s", args, err, out, errb)
+		h.T.Fatalf("prox %v: %v\nstdout: %s\nstderr: %s", args, err, out, errb)
 	}
 	return out
 }

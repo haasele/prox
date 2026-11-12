@@ -3,66 +3,275 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>prox dashboard</title>
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f5f1">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141311">
+<title>prox</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header>
-  <div class="brand"><span class="dot"></span> prox</div>
-  <div class="statusline">
-    <span id="status-pill" class="pill">connecting…</span>
-    <label class="inline">policy
-      <select id="policy">
-        <option value="rewrite">rewrite</option>
-        <option value="deny">deny</option>
-        <option value="warn">warn</option>
-      </select>
-    </label>
-    <label class="inline"><input type="checkbox" id="enforce"> enforcement</label>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Icons: Lucide (ISC), 24px grid, rendered at 16px. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+</svg>
+
+<header class="app-header">
+  <h1 class="brand"><a href="#applications">prox</a></h1>
+  <nav class="tabs" aria-label="Sections">
+    <a class="tab" data-tab="applications" href="#applications" aria-current="page">Applications</a>
+    <a class="tab" data-tab="rules" href="#rules">Rules</a>
+    <a class="tab" data-tab="activity" href="#activity">Activity</a>
+    <a class="tab" data-tab="settings" href="#settings">Settings</a>
+  </nav>
+  <div class="header-tools">
+    <span id="status" class="status">connecting</span>
+    <button id="new-rule" class="button primary" type="button">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg>
+      New rule
+    </button>
   </div>
 </header>
 
-<main>
-  <section id="warnings" class="warnings hidden">
-    <h2>Warnings</h2>
-    <ul id="warning-list"></ul>
+<p id="notice" class="notice" role="status" aria-live="polite"></p>
+<p id="announcer" class="visually-hidden" role="status" aria-live="polite"></p>
+
+<main id="main" tabindex="-1">
+  <section class="panel" id="panel-applications" data-panel="applications">
+    <div class="panel-head">
+      <h2>Applications</h2>
+      <p id="reserved" class="meta"></p>
+      <label class="field search">
+        <span class="visually-hidden">Search applications</span>
+        <span class="search-box">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="app-search" type="search" placeholder="Search applications" autocomplete="off" spellcheck="false">
+        </span>
+      </label>
+    </div>
+
+    <div class="scroll">
+      <table id="applications">
+        <caption class="visually-hidden">Routes prox currently serves, with source and gateway ports</caption>
+        <colgroup>
+          <col style="width: 17%">
+          <col style="width: 22%">
+          <col style="width: 12%">
+          <col style="width: 14%">
+          <col style="width: 9%">
+          <col style="width: 13%">
+          <col style="width: 13%">
+        </colgroup>
+        <thead><tr>
+          <th scope="col">App</th>
+          <th scope="col">DNS name</th>
+          <th scope="col">Source port</th>
+          <th scope="col">Gateway port</th>
+          <th scope="col">Status</th>
+          <th scope="col">Upstream</th>
+          <th scope="col">Actions</th>
+        </tr></thead>
+        <tbody aria-busy="true"></tbody>
+      </table>
+    </div>
+
+    <section class="subpanel">
+      <h3>Unmanaged containers</h3>
+      <p class="meta">They publish host ports directly. A rule applies on the next create.</p>
+      <div class="scroll">
+        <table id="unmanaged">
+          <caption class="visually-hidden">Containers that publish host ports without prox</caption>
+          <colgroup>
+            <col style="width: 22%">
+            <col style="width: 28%">
+            <col style="width: 15%">
+            <col style="width: 17%">
+            <col style="width: 18%">
+          </colgroup>
+          <thead><tr>
+            <th scope="col">Container</th>
+            <th scope="col">Image</th>
+            <th scope="col">Project</th>
+            <th scope="col">Host ports</th>
+            <th scope="col">Actions</th>
+          </tr></thead>
+          <tbody aria-busy="true"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="subpanel" id="warnings" hidden>
+      <h3>Warnings</h3>
+      <ul id="warning-list"></ul>
+    </section>
+
+    <section class="subpanel">
+      <h3>Leases</h3>
+      <div class="scroll">
+        <table id="leases">
+          <caption class="visually-hidden">Active port leases</caption>
+          <colgroup>
+            <col style="width: 7%">
+            <col style="width: 30%">
+            <col style="width: 10%">
+            <col style="width: 10%">
+            <col style="width: 43%">
+          </colgroup>
+          <thead><tr>
+            <th scope="col">ID</th>
+            <th scope="col">DNS name</th>
+            <th scope="col">PID</th>
+            <th scope="col">Port</th>
+            <th scope="col">Command</th>
+          </tr></thead>
+          <tbody aria-busy="true"></tbody>
+        </table>
+      </div>
+    </section>
   </section>
 
-  <section>
-    <div class="section-head"><h2>Routes</h2><span id="route-count" class="muted"></span></div>
-    <div id="routes" class="cards"></div>
-  </section>
-
-  <div class="two-col">
-    <section>
+  <section class="panel" id="panel-rules" data-panel="rules" hidden>
+    <div class="panel-head">
       <h2>Rules</h2>
-      <table id="rules"><thead><tr><th>ID</th><th>Name</th><th>Project</th><th>Action</th><th>Source</th><th>Target</th><th>Resolve</th></tr></thead><tbody></tbody></table>
-    </section>
-    <section>
-      <h2>Leases</h2>
-      <table id="leases"><thead><tr><th>ID</th><th>Host</th><th>PID</th><th>Port</th><th>Command</th></tr></thead><tbody></tbody></table>
-    </section>
-  </div>
-
-  <section>
-    <h2>Unmanaged containers</h2>
-    <p class="muted">Containers binding host ports outside prox. A rule makes them routable on their next create.</p>
-    <div id="unmanaged" class="cards"></div>
+      <p class="meta">Rules apply on the next matching container create or lease.</p>
+    </div>
+    <div class="scroll">
+      <table id="rules">
+        <caption class="visually-hidden">Routing rules</caption>
+        <colgroup>
+          <col style="width: 6%">
+          <col style="width: 17%">
+          <col style="width: 12%">
+          <col style="width: 8%">
+          <col style="width: 10%">
+          <col style="width: 10%">
+          <col style="width: 22%">
+          <col style="width: 15%">
+        </colgroup>
+        <thead><tr>
+          <th scope="col">ID</th>
+          <th scope="col">Name</th>
+          <th scope="col">Project</th>
+          <th scope="col">Mode</th>
+          <th scope="col">Source port</th>
+          <th scope="col">Gateway port</th>
+          <th scope="col">DNS name</th>
+          <th scope="col">Actions</th>
+        </tr></thead>
+        <tbody aria-busy="true"></tbody>
+      </table>
+    </div>
   </section>
 
-  <section>
-    <div class="section-head"><h2>Live events</h2><span class="muted">source of truth: SQLite + bus</span></div>
-    <ol id="events" class="events"></ol>
+  <section class="panel" id="panel-activity" data-panel="activity" hidden>
+    <div class="panel-head">
+      <h2>Activity</h2>
+      <p class="meta">Routing decisions, leases, and container events. Newest first.</p>
+    </div>
+    <ol id="events" class="events" aria-label="Events"></ol>
+  </section>
+
+  <section class="panel" id="panel-settings" data-panel="settings" hidden>
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <p class="meta">How prox handles new containers and host port publishing.</p>
+    </div>
+
+    <div class="settings-page">
+      <section class="setting">
+        <h3 id="policy-title">Routing policy</h3>
+        <select id="policy" aria-labelledby="policy-title" aria-describedby="policy-notes">
+          <option value="rewrite">Rewrite</option>
+          <option value="warn">Warn</option>
+          <option value="deny">Deny</option>
+        </select>
+        <dl id="policy-notes" class="policy-notes">
+          <div><dt>Rewrite</dt><dd>New containers are routed automatically; host bindings are removed.</dd></div>
+          <div><dt>Warn</dt><dd>Containers run unproxied and prox reports a warning.</dd></div>
+          <div><dt>Deny</dt><dd>Containers that publish host ports are rejected.</dd></div>
+        </dl>
+      </section>
+
+      <section class="setting">
+        <h3>Enforcement</h3>
+        <label class="check setting-check">
+          <input type="checkbox" id="enforce" aria-describedby="enforce-hint">
+          Block host-port publishing
+        </label>
+        <p id="enforce-hint" class="hint">Blocks direct host-port publishing from the raw Docker socket. Docker must be restarted after enabling.</p>
+      </section>
+    </div>
   </section>
 </main>
 
-<template id="route-card">
-  <article class="card">
-    <div class="card-head"><span class="host"></span><span class="badge"></span></div>
-    <div class="meta"></div>
-    <div class="actions"></div>
-  </article>
-</template>
+<dialog id="rule-dialog" class="rule-dialog" aria-labelledby="rule-title" aria-describedby="rule-context rule-error">
+  <form id="rule-form" class="rule-form" novalidate>
+    <header class="dialog-head">
+      <h2 id="rule-title">New rule</h2>
+      <button id="rule-close" class="action close" type="button" aria-label="Close dialog" title="Close dialog">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+      </button>
+    </header>
+    <p id="rule-context" class="context"></p>
+    <div class="form-grid">
+      <label>Name (required)
+        <input name="name" required aria-required="true" placeholder="web, nginx, postgres" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Project
+        <input name="project" placeholder="optional" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Protocol
+        <select name="proto">
+          <option value="http">HTTP</option>
+          <option value="tcp">TCP</option>
+        </select>
+      </label>
+      <label>Source port
+        <input name="source" type="number" min="1" max="65535" inputmode="numeric" placeholder="container port" autocomplete="off" aria-describedby="port-hint">
+      </label>
+      <label>Gateway port
+        <input name="target" type="number" min="1" max="65535" inputmode="numeric" placeholder="443" autocomplete="off" aria-describedby="port-hint">
+      </label>
+      <label>DNS name
+        <input name="resolve" placeholder="name.localhost" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Action
+        <select name="action">
+          <option value="allow">Allow</option>
+          <option value="publish">Publish, keep host ports</option>
+          <option value="deny">Deny</option>
+        </select>
+      </label>
+      <label id="redirect-row" class="check"><input type="checkbox" name="redirect" checked> Redirect HTTP to HTTPS</label>
+      <label id="route-now-row" class="check hidden"><input type="checkbox" name="route_now" checked disabled> Route the running container now</label>
+    </div>
+    <p id="port-hint" class="hint">Ports are 1–65535. Leave Gateway port empty to use 443 for HTTP or the source port for TCP. Redirect applies to HTTP allow rules only.</p>
+    <p id="rule-error" class="error" role="alert" tabindex="-1"></p>
+    <footer class="form-actions">
+      <button type="submit" class="button primary">Create rule</button>
+      <button id="rule-cancel" class="button" type="button">Cancel</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+  <h2 id="confirm-title">Delete rule?</h2>
+  <p id="confirm-message" class="meta"></p>
+  <div class="form-actions">
+    <button id="confirm-cancel" class="button" type="button">Cancel</button>
+    <button id="confirm-ok" class="button danger" type="button">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg>
+      <span id="confirm-ok-label">Delete</span>
+    </button>
+  </div>
+</dialog>
 
 <script src="/app.js"></script>
 </body>
